@@ -584,9 +584,11 @@ def update_game(game_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any
         if new_status == "playing" and not current.get("started_at"):
             updates["started_at"] = now_utc_str
         elif new_status == "completed" and not current.get("completed_at"):
-            updates["completed_at"] = now_utc_str
+            if "completed_at" not in updates or not updates["completed_at"]:
+                updates["completed_at"] = now_utc_str
         elif new_status != "completed" and current["status"] == "completed":
-            updates["completed_at"] = ""
+            if "completed_at" not in updates:
+                updates["completed_at"] = ""
             
     if "platforms_list" in updates and isinstance(updates["platforms_list"], list):
         updates["platforms_list"] = json.dumps(updates["platforms_list"])

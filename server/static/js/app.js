@@ -1152,6 +1152,7 @@ const app = {
         document.getElementById('form-priority').value = game.priority || 'medium';
         document.getElementById('form-platform').value = game.platform || 'PC';
         document.getElementById('form-release-date').value = game.release_date || '';
+        document.getElementById('form-completed-at').value = this.formatCompletedAtDisplay(game.completed_at) || '';
         document.getElementById('form-developer').value = game.developer || '';
         document.getElementById('form-cover-url').value = game.cover_url || '';
         document.getElementById('form-playtime-main').value = game.playtime_main || '';
@@ -1169,10 +1170,34 @@ const app = {
       if (delBtn) delBtn.style.display = 'none';
       titleEl.textContent = '⚡ ДОБАВИТЬ ИГРУ';
       document.getElementById('form-game-id').value = '';
+      if (document.getElementById('form-completed-at')) {
+        document.getElementById('form-completed-at').value = '';
+      }
       this.setModalGenres('');
     }
 
     if (modal) modal.classList.add('open');
+  },
+
+  formatCompletedAtDisplay(val) {
+    if (!val) return '';
+    const trimmed = String(val).trim();
+    if (!trimmed) return '';
+    if (/^\d{2}\.\d{4}$/.test(trimmed)) return trimmed;
+    if (/^\d{1}\.\d{4}$/.test(trimmed)) return '0' + trimmed;
+    if (/^\d{4}-\d{2}$/.test(trimmed)) {
+      const parts = trimmed.split('-');
+      return `${parts[1]}.${parts[0]}`;
+    }
+    try {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const y = d.getFullYear();
+        return `${m}.${y}`;
+      }
+    } catch (e) {}
+    return trimmed;
   },
 
   openQuickTimeModal(gameId, gameTitle) {
@@ -1200,6 +1225,7 @@ const app = {
       priority: document.getElementById('form-priority').value,
       platform: document.getElementById('form-platform').value,
       release_date: document.getElementById('form-release-date').value,
+      completed_at: document.getElementById('form-completed-at')?.value?.trim() || '',
       genres: document.getElementById('form-genres').value || 'Экшен',
       developer: document.getElementById('form-developer').value,
       cover_url: document.getElementById('form-cover-url').value,

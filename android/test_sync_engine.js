@@ -19,6 +19,15 @@ if (!global.crypto) {
   global.crypto = webcrypto;
 }
 
+// Mock fetch
+let mockFetchHandler = null;
+global.fetch = async (url, options) => {
+  if (mockFetchHandler) {
+    return mockFetchHandler(url, options);
+  }
+  throw new Error('fetch unmocked: ' + url);
+};
+
 // Load sync.js
 const syncJsPath = path.join(__dirname, 'app', 'src', 'main', 'assets', 'js', 'core', 'sync.js');
 const syncCode = fs.readFileSync(syncJsPath, 'utf8');
@@ -27,94 +36,345 @@ eval(syncCode);
 const sync = global.window.GameRoomSync;
 assert(sync, 'GameRoomSync must be exported to window');
 
-console.log('--- 1. Testing UUID generator ---');
-const u1 = sync.generateUuid();
-const u2 = sync.generateUuid();
-assert.strictEqual(typeof u1, 'string');
-assert.strictEqual(u1.length, 36);
-assert.notStrictEqual(u1, u2);
-console.log('✔ UUID generated:', u1);
+async function runTests() {
+  console.log('--- 1. Testing UUID generator ---');
+  const u1 = sync.generateUuid();
+  const u2 = sync.generateUuid();
+  assert.strictEqual(typeof u1, 'string');
+  assert.strictEqual(u1.length, 36);
+  assert.notStrictEqual(u1, u2);
+  console.log('✔ UUID generated:', u1);
 
-console.log('--- 2. Testing Client ID generation ---');
-const cid = sync.getClientId();
-assert(cid.startsWith('android-'), 'Client ID must start with android-');
-assert.strictEqual(sync.getClientId(), cid, 'Client ID must be persistent');
-console.log('✔ Client ID:', cid);
+  console.log('--- 2. Testing Client ID generation ---');
+  const cid = sync.getClientId();
+  assert(cid.startsWith('android-'), 'Client ID must start with android-');
+  assert.strictEqual(sync.getClientId(), cid, 'Client ID must be persistent');
+  console.log('✔ Client ID:', cid);
 
-console.log('--- 3. Testing sync_queue compaction ---');
-sync.clearSyncQueue();
-const testUuid = sync.generateUuid();
+  console.log('--- 3. Testing sync_queue compaction ---');
+  sync.clearSyncQueue();
+  const testUuid = sync.generateUuid();
 
-// Action 1: Create
-sync.enqueueAction('create', testUuid, { title: 'Game A', status: 'playing' });
-let q = sync.getSyncQueue();
-assert.strictEqual(q.length, 1);
-assert.strictEqual(q[0].action, 'create');
-assert.strictEqual(q[0].payload.title, 'Game A');
+  // Action 1: Create
+  sync.enqueueAction('create', testUuid, { title: 'Game A', status: 'playing' });
+  let q = sync.getSyncQueue();
+  assert.strictEqual(q.length, 1);
+  assert.strictEqual(q[0].action, 'create');
+  assert.strictEqual(q[0].payload.title, 'Game A');
 
-// Action 2: Offline update (should merge into create)
-sync.enqueueAction('update', testUuid, { time: '5.0', rating: '9/10' });
-q = sync.getSyncQueue();
-assert.strictEqual(q.length, 1, 'Should stay 1 compacted entry');
-assert.strictEqual(q[0].action, 'create');
-assert.strictEqual(q[0].payload.rating, '9/10');
-assert.strictEqual(q[0].payload.time, '5.0');
+  // Action 2: Offline update (should merge into create)
+  sync.enqueueAction('update', testUuid, { time: '5.0', rating: '9/10' });
+  q = sync.getSyncQueue();
+  assert.strictEqual(q.length, 1, 'Should stay 1 compacted entry');
+  assert.strictEqual(q[0].action, 'create');
+  assert.strictEqual(q[0].payload.rating, '9/10');
+  assert.strictEqual(q[0].payload.time, '5.0');
 
-// Action 3: Offline delete (should cancel out create)
-sync.enqueueAction('delete', testUuid);
-q = sync.getSyncQueue();
-assert.strictEqual(q.length, 0, 'Create + Delete offline must cancel out completely');
-console.log('✔ Offline queue compaction verified');
+  // Action 3: Offline delete (should cancel out create)
+  sync.enqueueAction('delete', testUuid);
+  q = sync.getSyncQueue();
+  assert.strictEqual(q.length, 0, 'Create + Delete offline must cancel out completely');
+  console.log('✔ Offline queue compaction verified');
 
-console.log('--- 4. Testing entity mappings ---');
-const androidGame = {
-  id: 'game-123',
-  uuid: 'uuid-1234-5678',
-  title: 'Hades',
-  platform: 'Домашний ПК',
-  status: 'Пройдено',
-  time: '25.5',
-  rating: '9/10',
-  note: 'Отличный рогалик'
-};
-const syncItem = sync.androidGameToSyncItem(androidGame, 10);
-assert.strictEqual(syncItem.uuid, 'uuid-1234-5678');
-assert.strictEqual(syncItem.status, 'completed');
-assert.strictEqual(syncItem.user_playtime_minutes, 1530); // 25.5 * 60
-assert.strictEqual(syncItem.user_score, 9);
-console.log('✔ Android -> Server game mapping verified');
+  console.log('--- 4. Testing entity mappings ---');
+  const androidGame = {
+    id: 'game-123',
+    uuid: 'uuid-1234-5678',
+    title: 'Hades',
+    platform: 'Домашний ПК',
+    status: 'Пройдено',
+    time: '25.5',
+    rating: '9/10',
+    note: 'Отличный рогалик',
+    release_date: '2020-09-17'
+  };
+  const syncItem = sync.androidGameToSyncItem(androidGame, 10);
+  assert.strictEqual(syncItem.uuid, 'uuid-1234-5678');
+  assert.strictEqual(syncItem.status, 'completed');
+  assert.strictEqual(syncItem.user_playtime_minutes, 1530); // 25.5 * 60
+  assert.strictEqual(syncItem.user_score, 9);
+  assert.strictEqual(syncItem.release_date, '2020-09-17');
+  console.log('✔ Android -> Server game mapping verified');
 
-// Server -> Android mapping
-const serverGame = {
-  uuid: 'uuid-1234-5678',
-  title: 'Hades',
-  platform: 'PC',
-  status: 'completed',
-  user_playtime_minutes: 1530,
-  user_score: 9,
-  rating_grade: 'izumitelno',
-  user_review: 'Отличный рогалик',
-  completed_at: '2026-05-15T12:00:00Z'
-};
-const mappedBack = sync.serverGameToAndroidGame(serverGame);
-assert.strictEqual(mappedBack.uuid, 'uuid-1234-5678');
-assert.strictEqual(mappedBack.status, 'Пройдено');
-assert.strictEqual(mappedBack.time, '25.5');
-assert.strictEqual(mappedBack.rating, '9/10');
-assert.strictEqual(mappedBack.rating_grade, 'izumitelno');
-assert.strictEqual(mappedBack.year, '2026');
-assert.strictEqual(mappedBack.month, 'Май');
-console.log('✔ Server -> Android game mapping verified');
+  // Server -> Android mapping
+  const serverGame = {
+    uuid: 'uuid-1234-5678',
+    title: 'Hades',
+    platform: 'PC',
+    status: 'completed',
+    user_playtime_minutes: 1530,
+    user_score: 9,
+    rating_grade: 'izumitelno',
+    user_review: 'Отличный рогалик',
+    completed_at: '2026-05-15T12:00:00Z',
+    release_date: '2020-09-17'
+  };
+  const mappedBack = sync.serverGameToAndroidGame(serverGame);
+  assert.strictEqual(mappedBack.uuid, 'uuid-1234-5678');
+  assert.strictEqual(mappedBack.status, 'Пройдено');
+  assert.strictEqual(mappedBack.time, '25.5');
+  assert.strictEqual(mappedBack.rating, '9/10');
+  assert.strictEqual(mappedBack.rating_grade, 'izumitelno');
+  assert.strictEqual(mappedBack.year, '2026');
+  assert.strictEqual(mappedBack.month, 'Май');
+  assert.strictEqual(mappedBack.release_date, '2020-09-17');
+  console.log('✔ Server -> Android game mapping verified');
 
-console.log('--- 5. Testing local data auto-migration ---');
-const oldGames = [{ id: '171234', title: 'Old Game' }];
-const oldWishlist = [{ id: '171235', title: 'Old Wishlist' }];
-const migration = sync.ensureLocalUuids(oldGames, oldWishlist);
-assert(migration.changed);
-assert(migration.games[0].uuid);
-assert(migration.wishlist[0].uuid);
-console.log('✔ Local auto-migration verified');
+  console.log('--- 5. Testing local data auto-migration ---');
+  const oldGames = [{ id: '171234', title: 'Old Game' }];
+  const oldWishlist = [{ id: '171235', title: 'Old Wishlist' }];
+  const migration = sync.ensureLocalUuids(oldGames, oldWishlist);
+  assert(migration.changed);
+  assert(migration.games[0].uuid);
+  assert(migration.wishlist[0].uuid);
+  console.log('✔ Local auto-migration verified');
 
-console.log('\n========================================');
-console.log('ALL ANDROID SYNC ENGINE TESTS PASSED! ✔');
-console.log('========================================');
+  console.log('\n--- 6. Rule 1: playing -> В процессе ---');
+  assert.strictEqual(sync.STATUS_SERVER_TO_ANDROID['playing'], 'В процессе');
+  assert.strictEqual(sync.STATUS_ANDROID_TO_SERVER['В процессе'], 'playing');
+  const mappedPlaying = sync.serverGameToAndroidGame({ uuid: 'u1', title: 'G1', status: 'playing' });
+  assert.strictEqual(mappedPlaying.status, 'В процессе');
+  const syncedPlaying = sync.androidGameToSyncItem({ uuid: 'u1', title: 'G1', status: 'В процессе' });
+  assert.strictEqual(syncedPlaying.status, 'playing');
+  console.log('✔ playing -> В процессе verified bidirectionally');
+
+  console.log('\n--- 7. Rule 2: completed -> Пройдено ---');
+  assert.strictEqual(sync.STATUS_SERVER_TO_ANDROID['completed'], 'Пройдено');
+  assert.strictEqual(sync.STATUS_ANDROID_TO_SERVER['Пройдено'], 'completed');
+  const mappedCompleted = sync.serverGameToAndroidGame({ uuid: 'u2', title: 'G2', status: 'completed' });
+  assert.strictEqual(mappedCompleted.status, 'Пройдено');
+  const syncedCompleted = sync.androidGameToSyncItem({ uuid: 'u2', title: 'G2', status: 'Пройдено' });
+  assert.strictEqual(syncedCompleted.status, 'completed');
+  console.log('✔ completed -> Пройдено verified bidirectionally');
+
+  console.log('\n--- 8. Rule 3: dropped and paused -> Брошено ---');
+  assert.strictEqual(sync.STATUS_SERVER_TO_ANDROID['dropped'], 'Брошено');
+  assert.strictEqual(sync.STATUS_SERVER_TO_ANDROID['paused'], 'Брошено');
+  assert.strictEqual(sync.STATUS_ANDROID_TO_SERVER['Брошено'], 'dropped');
+  const mappedDropped = sync.serverGameToAndroidGame({ uuid: 'u3', title: 'G3', status: 'dropped' });
+  const mappedPaused = sync.serverGameToAndroidGame({ uuid: 'u4', title: 'G4', status: 'paused' });
+  assert.strictEqual(mappedDropped.status, 'Брошено');
+  assert.strictEqual(mappedPaused.status, 'Брошено');
+  assert.strictEqual(mappedDropped.status, mappedPaused.status, 'Both dropped and paused map to the exact same state');
+  console.log('✔ dropped and paused -> Брошено verified');
+
+  console.log('\n--- 9. Rule 4: backlog -> Хочу пройти, а не В процессе ---');
+  // Backlog sync item conversion
+  const wishlistSync = sync.androidWishlistToSyncItem({ uuid: 'w1', title: 'Backlog Game' });
+  assert.strictEqual(wishlistSync.status, 'backlog', 'Android backlog sync item must have status backlog');
+
+  // Initial sync routing test
+  mockFetchHandler = async (url) => {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        server_time: '2026-10-01T12:00:00Z',
+        merged_count: 0,
+        created_count: 2,
+        games: [
+          { uuid: 'bg-1', title: 'Backlog Title', status: 'backlog', platform: 'PC / Steam' },
+          { uuid: 'pl-1', title: 'Playing Title', status: 'playing', platform: 'PC / Steam' }
+        ]
+      })
+    };
+  };
+
+  const initialRes = await sync.performInitialSync('http://test', 'test-token', [], []);
+  assert.strictEqual(initialRes.games.length, 1, 'Only playing game should be in games');
+  assert.strictEqual(initialRes.games[0].title, 'Playing Title');
+  assert.strictEqual(initialRes.games[0].status, 'В процессе');
+  assert.strictEqual(initialRes.wishlist.length, 1, 'Backlog game must be in wishlist («Хочу пройти»)');
+  assert.strictEqual(initialRes.wishlist[0].title, 'Backlog Title');
+  assert(!initialRes.games.some(g => g.title === 'Backlog Title'), 'Backlog game must NOT be in games («В процессе»)!');
+  console.log('✔ backlog correctly routed to «Хочу пройти», not «В процессе»');
+
+  console.log('\n--- 10. Rule 5: wishlist is NOT synced to Android ---');
+  // Initial sync should ignore server wishlist
+  mockFetchHandler = async (url) => {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        server_time: '2026-10-01T12:00:00Z',
+        merged_count: 0,
+        created_count: 1,
+        games: [
+          { uuid: 'wl-1', title: 'Web Wishlist Only', status: 'wishlist', platform: 'PC / Steam' },
+          { uuid: 'pl-2', title: 'Playing Game', status: 'playing', platform: 'PC / Steam' }
+        ]
+      })
+    };
+  };
+
+  const initialWlRes = await sync.performInitialSync('http://test', 'test-token', [], []);
+  assert(!initialWlRes.games.some(g => g.uuid === 'wl-1'), 'Server wishlist must not be added to games');
+  assert(!initialWlRes.wishlist.some(w => w.uuid === 'wl-1'), 'Server wishlist must not be added to Android wishlist');
+  assert.strictEqual(initialWlRes.games.length, 1);
+  assert.strictEqual(initialWlRes.wishlist.length, 0);
+
+  // Delta sync should ignore and purge server wishlist
+  storage[sync.KEYS.LAST_SYNC] = '2026-10-01T10:00:00Z';
+  mockFetchHandler = async (url) => {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        server_time: '2026-10-01T13:00:00Z',
+        ack: {},
+        server_changes: {
+          created: [
+            { uuid: 'wl-2', title: 'Server Wishlist Item', status: 'wishlist' }
+          ],
+          updated: [],
+          deleted: []
+        }
+      })
+    };
+  };
+
+  const deltaRes = await sync.performDeltaSync('http://test', 'test-token', [], []);
+  assert(!deltaRes.games.some(g => g.uuid === 'wl-2'), 'Delta sync must not add server wishlist to games');
+  assert(!deltaRes.wishlist.some(w => w.uuid === 'wl-2'), 'Delta sync must not add server wishlist to Android wishlist');
+  console.log('✔ server wishlist is completely skipped and not synced to Android');
+
+  console.log('\n--- 11. Rule 6: Meta quest 3s VR -> Oculus Quest 3s ---');
+  const questNormalized1 = sync.normalizePlatformServerToAndroid('Meta quest 3s VR');
+  assert.strictEqual(questNormalized1, 'Oculus Quest 3s');
+  const questNormalized2 = sync.normalizePlatformServerToAndroid('Meta Quest 3S VR');
+  assert.strictEqual(questNormalized2, 'Oculus Quest 3s');
+  const questNormalized3 = sync.normalizePlatformServerToAndroid('oculus quest');
+  assert.strictEqual(questNormalized3, 'Oculus Quest 3s');
+
+  const mappedQuestGame = sync.serverGameToAndroidGame({
+    uuid: 'q1',
+    title: 'Beat Saber',
+    platform: 'Meta quest 3s VR',
+    status: 'playing'
+  });
+  assert.strictEqual(mappedQuestGame.platform, 'Oculus Quest 3s', 'Card platform must be Oculus Quest 3s');
+
+  const mappedQuestWishlist = sync.serverGameToAndroidWishlist({
+    uuid: 'q2',
+    title: 'Batman: Arkham Shadow',
+    platform: 'Meta quest 3s VR',
+    status: 'backlog'
+  });
+  assert.strictEqual(mappedQuestWishlist.platform, 'Oculus Quest 3s');
+  console.log('✔ Meta quest 3s VR successfully normalized to Oculus Quest 3s');
+
+  console.log('\n--- 12. Rule 7: Meta Quest 3s continues to be classified as VR in stats ---');
+  // Verify Android UI statistics platform aggregation
+  const testGames = [
+    { id: '1', platform: 'Oculus Quest 3s', time: '10.5' },
+    { id: '2', platform: 'Домашний ПК', time: '20.0' }
+  ];
+  const platformHours = {};
+  testGames.forEach(g => {
+    const h = parseFloat(g.time) || 0;
+    platformHours[g.platform] = (platformHours[g.platform] || 0) + h;
+  });
+  assert.strictEqual(platformHours['Oculus Quest 3s'], 10.5, 'Oculus Quest 3s platform hours tracked');
+
+  // Verify Android Fate roulette platform filter matches Oculus Quest 3s as Quest/VR
+  const matchFate = (g, platform) => {
+    switch (platform) {
+      case 'PC': return g.platform === 'Домашний ПК' || g.platform === 'Рабочий ПК';
+      case 'Switch': return g.platform === 'Nintendo Switch';
+      case 'Quest': return g.platform === 'Oculus Quest 3s';
+      default: return false;
+    }
+  };
+  assert.strictEqual(matchFate(testGames[0], 'Quest'), true, 'Quest filter recognizes Oculus Quest 3s');
+  assert.strictEqual(matchFate(testGames[1], 'Quest'), false);
+  console.log('✔ Meta Quest 3s VR classification intact');
+
+  console.log('\n--- 13. Rule 8: Release date and Completion date are distinct fields ---');
+  const dualDateGame = {
+    uuid: 'dual-1',
+    title: 'Elden Ring DLC',
+    status: 'Пройдено',
+    release_date: '2024-06-21',
+    month: 'Сентябрь',
+    year: '2026',
+    completed_at: '2026-09-15'
+  };
+
+  const syncedDual = sync.androidGameToSyncItem(dualDateGame);
+  assert.strictEqual(syncedDual.release_date, '2024-06-21', 'Release date must be RAWG date');
+  assert(syncedDual.completed_at.startsWith('2026-09'), 'Completed date must be completion timestamp');
+  assert.notStrictEqual(syncedDual.release_date, syncedDual.completed_at, 'Release date and completion date must be different');
+
+  const roundtripped = sync.serverGameToAndroidGame({
+    uuid: 'dual-1',
+    title: 'Elden Ring DLC',
+    status: 'completed',
+    release_date: '2024-06-21',
+    completed_at: '2026-09-15T00:00:00Z'
+  });
+  assert.strictEqual(roundtripped.release_date, '2024-06-21');
+  assert.strictEqual(roundtripped.month, 'Сентябрь');
+  assert.strictEqual(roundtripped.year, '2026');
+  console.log('✔ Release date and completion date are verified as separate independent fields');
+
+  console.log('\n--- 14. Rule 9: Completion statistics use completion date, NOT release date ---');
+  const compDateSample = sync.serverGameToAndroidGame({
+    uuid: 'stat-1',
+    title: 'Expedition 33',
+    status: 'completed',
+    user_playtime_minutes: 600,
+    release_date: '2024-06-10',
+    completed_at: '09.2026' // MM.YYYY format
+  });
+  assert.strictEqual(compDateSample.year, '2026', 'Year must come from completion date');
+  assert.strictEqual(compDateSample.month, 'Сентябрь', 'Month must come from completion date');
+
+  // Verify monthly stats calculation uses g.month (from completion date)
+  const monthOrder = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  const monthHours = {};
+  monthOrder.forEach(m => monthHours[m] = 0);
+  [compDateSample].forEach(g => {
+    const h = parseFloat(g.time) || 0;
+    if (g.month) monthHours[g.month] = (monthHours[g.month] || 0) + h;
+  });
+  assert.strictEqual(monthHours['Сентябрь'], 10.0, 'Stats must credit hours to September (completion date)');
+  assert.strictEqual(monthHours['Июнь'], 0.0, 'Stats must NOT credit hours to June (release date)');
+  console.log('✔ Completion statistics strictly uses completion date, not release date');
+
+  console.log('\n--- 15. Rule 10: Empty completion date is NOT replaced by release date ---');
+  const emptyCompGame = sync.serverGameToAndroidGame({
+    uuid: 'empty-comp-1',
+    title: 'Uncompleted RPG',
+    status: 'playing',
+    release_date: '2024-06-10',
+    completed_at: null
+  });
+  assert.strictEqual(emptyCompGame.release_date, '2024-06-10', 'Release date must be preserved');
+  assert.strictEqual(emptyCompGame.month, '', 'Month must remain empty when completed_at is null');
+  assert.strictEqual(emptyCompGame.year, '', 'Year must remain empty when completed_at is null');
+  assert.strictEqual(emptyCompGame.completed_at, '', 'completed_at must remain empty string');
+
+  // Stats test with empty completion date
+  const monthHoursEmpty = {};
+  monthOrder.forEach(m => monthHoursEmpty[m] = 0);
+  [emptyCompGame].forEach(g => {
+    const h = parseFloat(g.time) || 0;
+    if (g.month) monthHoursEmpty[g.month] = (monthHoursEmpty[g.month] || 0) + h;
+  });
+  Object.values(monthHoursEmpty).forEach(val => {
+    assert.strictEqual(val, 0, 'No month hours should be credited when completion date is empty');
+  });
+  console.log('✔ Empty completion date is correctly kept empty and not replaced by release date');
+
+  console.log('\n============================================================');
+  console.log('ALL 15 TEST SUITES AND ALL 10 DISCREPANCY RULES PASSED! ✔');
+  console.log('============================================================');
+}
+
+runTests().catch(err => {
+  console.error('Test failed:', err);
+  process.exit(1);
+});

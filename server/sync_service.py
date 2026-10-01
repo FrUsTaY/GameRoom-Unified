@@ -482,7 +482,7 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
                 if user_score == 0:
                     user_score = g_score
 
-            status = normalize_status(item.get("status") if source_kind == "game" else "wishlist")
+            status = normalize_status(item.get("status") or ("backlog" if source_kind == "wishlist" else "playing"))
 
             if matched_server_game:
                 # Merge into existing server game
@@ -534,8 +534,8 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
                     "is_favorite": 1 if rating_grade == "izumitelno" or user_score >= 9 else 0,
                     "priority": "medium",
                     "created_at": server_time_str,
-                    "started_at": server_time_str if status == "playing" else "",
-                    "completed_at": server_time_str if status == "completed" else "",
+                    "started_at": item.get("started_at") or (server_time_str if status == "playing" else ""),
+                    "completed_at": item.get("completed_at") or (server_time_str if status == "completed" else ""),
                     "last_played_at": server_time_str if status == "playing" else "",
                     "updated_at": server_time_str,
                     "updated_by": client_id,

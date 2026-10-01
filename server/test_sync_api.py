@@ -300,15 +300,66 @@ class TestSyncAPI(unittest.TestCase):
         self.assertGreaterEqual(data["merged_count"], 1, "Death Stranding 2 should be merged")
         self.assertGreaterEqual(data["created_count"], 2, "Indie game and Silksong should be created")
 
-        # Verify that Silksong was created with status 'wishlist'
+        # Verify that Silksong was created with status 'backlog' (Хочу пройти)
         silksong = next((g for g in data["games"] if "Silksong" in g["title"]), None)
         self.assertIsNotNone(silksong)
-        self.assertEqual(silksong["status"], "wishlist")
+        self.assertEqual(silksong["status"], "backlog")
 
         # Verify Indie Game created on Switch
         indie = next((g for g in data["games"] if "Brand New Indie Game" in g["title"]), None)
         self.assertIsNotNone(indie)
         self.assertEqual(indie["platform"], "Nintendo Switch")
+
+    def test_07_discrepancy_rules(self):
+        """Verifies platform VR normalization and release_date/completed_at separation on server."""
+        # 1. Platform normalization: Oculus Quest 3s and Meta quest 3s VR -> Meta Quest 3S VR
+        self.assertEqual(db.normalize_platform("Oculus Quest 3s"), "Meta Quest 3S VR")
+        self.assertEqual(db.normalize_platform("Meta quest 3s VR"), "Meta Quest 3S VR")
+        self.assertEqual(sync_service.normalize_platform("oculus quest 3s"), "Meta Quest 3S VR")
+
+        # 2. Delta sync creates game with normalized platform Meta Quest 3S VR
+        new_uuid = str(uuid.uuid4())
+        delta_payload = {
+            "client_id": "android-test-vr",
+            "client_version": "1.0",
+            "client_time_now": datetime.now(timezone.utc).isoformat(),
+            "last_sync_timestamp": datetime.now(timezone.utc).isoformat(),
+            "changes": {
+                "created": [
+                    {
+                        "uuid": new_uuid,
+                        "title": "VR Test Quest Game",
+                        "platform": "Oculus Quest 3s",
+                        "status": "completed",
+                        "release_date": "2024-06-10",
+                        "completed_at": "2026-09-15T00:00:00Z"
+                    }
+                ],
+                "updated": [],
+                "deleted": []
+            }
+        }
+        res = self.client.post("/api/sync", json=delta_payload, headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        game_record = db.get_game_by_uuid(new_uuid)
+        self.assertIsNotNone(game_record)
+        self.assertEqual(game_record["release_date"], "2024-06-10")
+        self.assertEqual(game_record["completed_at"], "2026-09-15T00:00:00Z")
+        self.assertEqual(game_record["platform"], "Meta Quest 3S VR")
+
+        # 3. Empty completed_at does not get overwritten by release_date
+        new_uuid_2 = str(uuid.uuid4())
+        created_2 = db.create_game({
+            "title": "Uncompleted RPG Test",
+            "platform": "PC / Steam",
+            "status": "playing",
+            "release_date": "2024-06-10",
+            "completed_at": "",
+            "uuid": new_uuid_2
+        })
+        game_record_2 = db.get_game_by_id(created_2["id"])
+        self.assertEqual(game_record_2["release_date"], "2024-06-10")
+        self.assertFalse(bool(game_record_2["completed_at"]))
 
 if __name__ == "__main__":
     unittest.main()

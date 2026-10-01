@@ -138,10 +138,10 @@
     'В процессе': 'playing',
     'Брошено': 'dropped',
     'В бэклоге': 'backlog',
-    'wishlist': 'wishlist',
     'completed': 'completed',
     'playing': 'playing',
     'dropped': 'dropped',
+    'paused': 'dropped',
     'backlog': 'backlog'
   };
 
@@ -149,10 +149,89 @@
     'completed': 'Пройдено',
     'playing': 'В процессе',
     'dropped': 'Брошено',
-    'paused': 'В процессе',
-    'backlog': 'В процессе',
-    'wishlist': 'wishlist'
+    'paused': 'Брошено',
+    'backlog': 'В бэклоге'
   };
+
+  const PLATFORM_SERVER_TO_ANDROID = {
+    'meta quest 3s vr': 'Oculus Quest 3s',
+    'meta quest 3s': 'Oculus Quest 3s',
+    'oculus quest 3s': 'Oculus Quest 3s',
+    'oculus quest 2': 'Oculus Quest 3s',
+    'oculus quest': 'Oculus Quest 3s',
+    'quest 3s': 'Oculus Quest 3s',
+    'quest': 'Oculus Quest 3s',
+    'nintendo switch': 'Nintendo Switch',
+    'switch': 'Nintendo Switch',
+    'playstation 5': 'Домашний ПК',
+    'playstation 4': 'Домашний ПК',
+    'xbox series s/x': 'Домашний ПК',
+    'pc': 'Домашний ПК',
+    'домашний пк': 'Домашний ПК',
+    'рабочий пк': 'Рабочий ПК'
+  };
+
+  function normalizePlatformServerToAndroid(serverPlatform) {
+    if (!serverPlatform) return 'Домашний ПК';
+    const clean = String(serverPlatform).trim();
+    const lower = clean.toLowerCase();
+    if (PLATFORM_SERVER_TO_ANDROID[lower]) {
+      return PLATFORM_SERVER_TO_ANDROID[lower];
+    }
+    if (lower.includes('quest') || lower.includes('oculus') || lower.includes('vr')) {
+      return 'Oculus Quest 3s';
+    }
+    if (lower.includes('switch')) {
+      return 'Nintendo Switch';
+    }
+    if (clean === 'Рабочий ПК' || clean === 'Домашний ПК' || clean === 'Nintendo Switch' || clean === 'Oculus Quest 3s') {
+      return clean;
+    }
+    return 'Домашний ПК';
+  }
+
+  function parseCompletionDate(completedAt) {
+    if (!completedAt || typeof completedAt !== 'string') {
+      return { month: '', year: '' };
+    }
+    const trimmed = completedAt.trim();
+    if (!trimmed) {
+      return { month: '', year: '' };
+    }
+
+    const MONTH_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+    // 1. Format MM.YYYY (e.g., "09.2026" or "9.2026")
+    const dotMatch = trimmed.match(/^(\d{1,2})\.(\d{4})$/);
+    if (dotMatch) {
+      const mIdx = parseInt(dotMatch[1], 10) - 1;
+      if (mIdx >= 0 && mIdx < 12) {
+        return { month: MONTH_RU[mIdx], year: dotMatch[2] };
+      }
+    }
+
+    // 2. Format YYYY-MM (e.g., "2026-09")
+    const dashMatch = trimmed.match(/^(\d{4})-(\d{1,2})$/);
+    if (dashMatch) {
+      const mIdx = parseInt(dashMatch[2], 10) - 1;
+      if (mIdx >= 0 && mIdx < 12) {
+        return { month: MONTH_RU[mIdx], year: dashMatch[1] };
+      }
+    }
+
+    // 3. Full ISO Date (e.g., "2026-09-15T12:00:00Z" or "2026-09-15")
+    try {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        return {
+          month: MONTH_RU[d.getMonth()],
+          year: d.getFullYear().toString()
+        };
+      }
+    } catch (e) {}
+
+    return { month: '', year: '' };
+  }
 
   function parseUserScore(ratingStr) {
     if (!ratingStr || ratingStr === '-') return 0;
@@ -176,6 +255,20 @@
     const playtimeMinutes = Math.round(parseFloat(game.time || 0) * 60);
     const userScore = parseUserScore(game.rating);
 
+    let completedAt = '';
+    if (game.status === 'Пройдено') {
+      if (game.completed_at) {
+        completedAt = game.completed_at;
+      } else if (game.month && game.year) {
+        const MONTH_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+        const mIdx = MONTH_RU.indexOf(game.month);
+        if (mIdx >= 0) {
+          const mStr = String(mIdx + 1).padStart(2, '0');
+          completedAt = `${mStr}.${game.year}`;
+        }
+      }
+    }
+
     return {
       uuid: itemUuid,
       client_seq: clientSeq || getNextSeq(),
@@ -191,7 +284,8 @@
       background_url: game.coverUrl || '',
       notes: game.note || '',
       user_review: game.status === 'Пройдено' ? (game.note || '') : '',
-      completed_at: game.status === 'Пройдено' ? (game.completed_at || game.updated_at || new Date().toISOString()) : '',
+      release_date: game.release_date || '',
+      completed_at: completedAt,
       created_at: game.created_at || game.updated_at || new Date().toISOString(),
       updated_at: game.updated_at || new Date().toISOString(),
       rawg_id: game.rawg_id || null,
@@ -209,7 +303,7 @@
       uuid: itemUuid,
       client_seq: clientSeq || getNextSeq(),
       title: wItem.title || 'Untitled Game',
-      status: 'wishlist',
+      status: 'backlog',
       platform: wItem.platform || 'Домашний ПК',
       platforms_list: [wItem.platform || 'Домашний ПК'],
       user_playtime_minutes: 0,
@@ -219,7 +313,7 @@
       cover_url: wItem.coverUrl || '',
       background_url: wItem.coverUrl || '',
       notes: wItem.note || '',
-      release_date: wItem.expectedYear ? `${wItem.expectedYear}-01-01` : '',
+      release_date: wItem.release_date || (wItem.expectedYear ? `${wItem.expectedYear}-01-01` : ''),
       created_at: wItem.created_at || wItem.updated_at || new Date().toISOString(),
       updated_at: wItem.updated_at || new Date().toISOString()
     };
@@ -230,33 +324,24 @@
     const ratingStr = gradeToRatingStr(sGame.rating_grade, sGame.user_score);
     const androidStatus = STATUS_SERVER_TO_ANDROID[sGame.status] || 'В процессе';
 
-    let yearStr = '2026';
-    let monthStr = 'Апрель';
-    const dateSrc = sGame.completed_at || sGame.release_date || sGame.created_at;
-    if (dateSrc) {
-      try {
-        const d = new Date(dateSrc);
-        if (!isNaN(d.getTime())) {
-          yearStr = d.getFullYear().toString();
-          const months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-          monthStr = months[d.getMonth()];
-        }
-      } catch (e) {}
-    }
+    // Strictly parse completion date ONLY from completed_at
+    const { month: compMonth, year: compYear } = parseCompletionDate(sGame.completed_at);
 
     return {
       id: sGame.uuid,
       uuid: sGame.uuid,
       title: sGame.title || '',
-      platform: sGame.platform || 'Домашний ПК',
+      platform: normalizePlatformServerToAndroid(sGame.platform),
       status: androidStatus,
       time: hours,
       rating: ratingStr,
       rating_grade: sGame.rating_grade || '',
       user_score: sGame.user_score || 0,
       note: sGame.user_review || sGame.notes || '',
-      month: monthStr,
-      year: yearStr,
+      month: compMonth,
+      year: compYear,
+      completed_at: sGame.completed_at || '',
+      release_date: sGame.release_date || '',
       coverUrl: sGame.cover_url || sGame.background_url || '',
       avgPlaytime: sGame.playtime_main || null,
       rawg_id: sGame.rawg_id || null,
@@ -272,8 +357,8 @@
   }
 
   function serverGameToAndroidWishlist(sGame) {
-    let expYear = '2026';
-    let expMonth = 'Апрель';
+    let expYear = '';
+    let expMonth = '';
     if (sGame.release_date) {
       try {
         const d = new Date(sGame.release_date);
@@ -289,9 +374,10 @@
       id: sGame.uuid,
       uuid: sGame.uuid,
       title: sGame.title || '',
-      platform: sGame.platform || 'Домашний ПК',
+      platform: normalizePlatformServerToAndroid(sGame.platform),
       expectedMonth: expMonth,
       expectedYear: expYear,
+      release_date: sGame.release_date || '',
       note: sGame.notes || '',
       avgPlaytime: sGame.playtime_main || null,
       coverUrl: sGame.cover_url || '',
@@ -352,9 +438,11 @@
     });
 
     const wishlistPayload = (currentWishlist || []).map(w => {
-      if (!w.uuid) w.uuid = generateUuid();
-      if (!w.updated_at) w.updated_at = nowIso;
-      return w;
+      const copy = Object.assign({}, w);
+      if (!copy.uuid) copy.uuid = generateUuid();
+      if (!copy.updated_at) copy.updated_at = nowIso;
+      copy.status = 'backlog';
+      return copy;
     });
 
     const payload = {
@@ -386,12 +474,16 @@
       throw new Error(data.error || 'Initial sync failed');
     }
 
-    // Split server master games into games and wishlist
+    // Split server master games into games and backlog («Хочу пройти»)
     const newGames = [];
     const newWishlist = [];
 
     for (const sg of (data.games || [])) {
       if (sg.status === 'wishlist') {
+        // server wishlist -> НЕ синхронизировать с Android вообще
+        continue;
+      } else if (sg.status === 'backlog') {
+        // server backlog -> Android «Хочу пройти»
         newWishlist.push(serverGameToAndroidWishlist(sg));
       } else {
         newGames.push(serverGameToAndroidGame(sg));
@@ -513,18 +605,25 @@
       if (!sGame.uuid) continue;
 
       if (sGame.status === 'wishlist') {
-        // Belongs to wishlist
+        // server wishlist -> НЕ синхронизировать с Android вообще
+        updatedGames = updatedGames.filter(g => g.uuid !== sGame.uuid && g.id !== sGame.uuid);
+        updatedWishlist = updatedWishlist.filter(w => w.uuid !== sGame.uuid && w.id !== sGame.uuid);
+        continue;
+      }
+
+      if (sGame.status === 'backlog') {
+        // server backlog -> Android-состояние бэклога («Хочу пройти»)
         const wItem = serverGameToAndroidWishlist(sGame);
         const idx = updatedWishlist.findIndex(w => w.uuid === sGame.uuid || w.id === sGame.uuid);
         if (idx >= 0) {
           updatedWishlist[idx] = Object.assign({}, updatedWishlist[idx], wItem);
         } else {
-          updatedWishlist.push(wItem);
+          updatedWishlist.unshift(wItem);
         }
-        // Remove from games if it was moved to wishlist
+        // Remove from games if it was moved to backlog
         updatedGames = updatedGames.filter(g => g.uuid !== sGame.uuid && g.id !== sGame.uuid);
       } else {
-        // Belongs to games
+        // Belongs to games (playing, completed, dropped, paused)
         const gItem = serverGameToAndroidGame(sGame);
         const idx = updatedGames.findIndex(g => g.uuid === sGame.uuid || g.id === sGame.uuid);
         if (idx >= 0) {
@@ -588,6 +687,10 @@
     androidWishlistToSyncItem: androidWishlistToSyncItem,
     serverGameToAndroidGame: serverGameToAndroidGame,
     serverGameToAndroidWishlist: serverGameToAndroidWishlist,
+    normalizePlatformServerToAndroid: normalizePlatformServerToAndroid,
+    parseCompletionDate: parseCompletionDate,
+    STATUS_SERVER_TO_ANDROID: STATUS_SERVER_TO_ANDROID,
+    STATUS_ANDROID_TO_SERVER: STATUS_ANDROID_TO_SERVER,
     checkServerStatus: checkServerStatus,
     performInitialSync: performInitialSync,
     performDeltaSync: performDeltaSync,

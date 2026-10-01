@@ -500,7 +500,7 @@ return (
                     game.status === 'В процессе' ? 'bg-blue-400 shadow-[0_0_8px_#60a5fa]' :
                     'bg-gray-400 shadow-[0_0_8px_#9ca3af]'
                 }`}></span>
-                <span className="text-xs font-black uppercase tracking-widest text-slate-400">{game.platform}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-slate-400">Платформа: {game.platform}</span>
             </div>
             <div className="flex gap-3">
                 <button onClick={() => handleGameInsight(game)} disabled={isThisLoading} className="text-cyan-400 hover:scale-110 transition-transform disabled:opacity-50">
@@ -576,7 +576,7 @@ return (
         <span>{game.rating}</span>
     </div>
 </div>
-<div className="text-xs font-black text-slate-500">{game.month} {game.year}</div>
+<div className="text-xs font-black text-slate-500">{game.month || game.year ? `${game.month || ''} ${game.year || ''}`.trim() : ''}</div>
 </div>
 
         {game.note && <div className="mt-5 text-xs italic text-slate-400 border-l-2 border-cyan-400/30 pl-3">{game.note}</div>}
@@ -1447,7 +1447,7 @@ const [wishlistShowResults, setWishlistShowResults] = useState(false);
 
                     const [newGame, setNewGame] = useState({
             title: '', platform: 'Домашний ПК', status: 'Пройдено',
-            time: '0', rating: '8/10', note: '', month: 'Апрель', year: '2026',
+            time: '0', rating: '8/10', note: '', month: '', year: '',
             coverUrl: ''
         });
 const filteredSortedWishlist = useMemo(() => {
@@ -1861,7 +1861,8 @@ if (game.released) {
 let platform = newGame.platform;
 if (game.platforms && game.platforms.length > 0) {
     const platformNames = game.platforms.map(p => p.platform.name);
-    if (platformNames.some(n => n.includes('PC'))) platform = 'Домашний ПК';
+    if (platformNames.some(n => n.includes('Quest') || n.includes('VR') || n.includes('Oculus'))) platform = 'Oculus Quest 3s';
+    else if (platformNames.some(n => n.includes('PC'))) platform = 'Домашний ПК';
     else if (platformNames.some(n => n.includes('PlayStation'))) platform = 'Домашний ПК';
     else if (platformNames.some(n => n.includes('Xbox'))) platform = 'Домашний ПК';
     else if (platformNames.some(n => n.includes('Switch'))) platform = 'Nintendo Switch';
@@ -1872,8 +1873,9 @@ setNewGame({
     title: game.name,
     coverUrl: game.background_image || '',
     rating: game.rating ? `${Math.round(game.rating * 10) / 10}/10` : '8/10',
-    year: releaseYear || newGame.year,
-    month: releaseMonth,
+    release_date: game.released || '',
+    year: newGame.year,
+    month: newGame.month,
     platform: platform
 });
 
@@ -1977,7 +1979,8 @@ if (game.released) {
 let platform = 'Домашний ПК';
 if (game.platforms && game.platforms.length > 0) {
     const platformNames = game.platforms.map(p => p.platform.name);
-    if (platformNames.some(n => n.includes('Switch'))) platform = 'Nintendo Switch';
+    if (platformNames.some(n => n.includes('Quest') || n.includes('VR') || n.includes('Oculus'))) platform = 'Oculus Quest 3s';
+    else if (platformNames.some(n => n.includes('Switch'))) platform = 'Nintendo Switch';
     else if (platformNames.some(n => n.includes('PC'))) platform = 'Домашний ПК';
     else if (platformNames.some(n => n.includes('PlayStation'))) platform = 'Домашний ПК';
     else if (platformNames.some(n => n.includes('Xbox'))) platform = 'Домашний ПК';
@@ -2359,7 +2362,9 @@ if (isMountedRef.current) {
 
 const filteredGames = useMemo(() => {
 return games.filter(g => {
-    if (activeTab !== 'ВСЕ') {
+    if (activeTab === 'ВСЕ') {
+        if (g.status !== 'В процессе' && g.status !== 'Пройдено' && g.status !== 'Брошено') return false;
+    } else {
         const statusMap = { 'В ПРОЦЕССЕ': 'В процессе', 'ПРОЙДЕНО': 'Пройдено', 'БРОШЕНО': 'Брошено' };
         if (g.status !== statusMap[activeTab]) return false;
     }
@@ -2698,7 +2703,7 @@ return () => {
                                     setEditingGame(null);
 setNewGame({
 title: '', platform: 'Домашний ПК', status: 'Пройдено',
-time: '0', rating: '8/10', note: '', month: 'Апрель', year: '2026',
+time: '0', rating: '8/10', note: '', month: '', year: '',
 coverUrl: '', avgPlaytime: null
 });
                                     setIsModalOpen(true);
@@ -3897,7 +3902,10 @@ aria-label="Закрыть окно"
                                         <CustomSelect
                                             value={newGame.month}
                                             onChange={e => setNewGame({...newGame, month: e.target.value})}
-                                            options={['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'].map(m => ({ value: m, label: m }))}
+                                            options={[
+                                                { value: "", label: "— (не указан)" },
+                                                ...['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'].map(m => ({ value: m, label: m }))
+                                            ]}
                                         />
                                     </div>
                                     <div>
@@ -3947,7 +3955,7 @@ setNewGame({...newGame, year: val});
 saveGame();
 setNewGame({
     title: '', platform: 'Домашний ПК', status: 'Пройдено',
-    time: '0', rating: '8/10', note: '', month: 'Апрель', year: '2026',
+    time: '0', rating: '8/10', note: '', month: '', year: '',
     coverUrl: '', avgPlaytime: null
 });
 }} className="w-full py-7 bg-gradient-to-r from-cyan-400 to-purple-400 text-black font-black text-lg rounded-3xl shadow-2xl shadow-cyan-500/50 hover:scale-[1.03] transition-all active:scale-95">
