@@ -1,0 +1,8 @@
+/* Russo One Font Family - Google Fonts */
+@font-face {
+  font-family: 'Russo One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('RussoOne/RussoOne-Regular.ttf') format('truetype');
+}

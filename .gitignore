@@ -1,0 +1,83 @@
+# ==========================================
+# Game-Room Unified - Root .gitignore
+# ==========================================
+
+# --- Python & Environments ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+env/
+ENV/
+
+# --- Database & Persistent Storage ---
+server/data/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+test_*.db
+gameroom_e2e_*
+
+# --- Environment & Secret Keys ---
+.env
+.env.local
+*.key
+*.token
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Android Build & Gradle ---
+.gradle/
+**/build/
+android/build/
+android/app/build/
+*.iml
+.idea/
+local.properties
+/local.properties
+android/local.properties
+android/app/local.properties
+*.apk
+*.aab
+captures/
+.externalNativeBuild
+.cxx
+
+# --- OS Specific Files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# --- Editor & IDE Cache ---
+.vscode/
+*.swp
+*.swo
+*~

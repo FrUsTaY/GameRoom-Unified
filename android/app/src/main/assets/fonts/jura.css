@@ -1,0 +1,24 @@
+/* Jura Font Family - Google Fonts */
+@font-face {
+  font-family: 'Jura';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('Jura/Jura-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Jura';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('Jura/Jura-Medium.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Jura';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('Jura/Jura-Bold.ttf') format('truetype');
+}

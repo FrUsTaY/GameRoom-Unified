@@ -1,0 +1,9 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Base.Theme.GameRoom" parent="Theme.Material3.DayNight.NoActionBar">
+    </style>
+
+    <style name="Theme.GameRoom" parent="Base.Theme.GameRoom">
+        <item name="android:windowBackground">#08090d</item>
+        <item name="android:windowSplashScreenBackground">#08090d</item>
+    </style>
+</resources>

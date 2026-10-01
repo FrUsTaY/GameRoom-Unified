@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GAME-ROOM's // Backlog Tracker</title>
+  
+  <!-- PWA Manifest & Meta Tags (with Cache-Busting v6) -->
+  <link rel="manifest" href="/manifest.json?v=6">
+  <meta name="theme-color" content="#07050e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GAME-ROOM">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico?v=6">
+  <link rel="shortcut icon" href="/favicon.ico?v=6">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png?v=6">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png?v=6">
+  <link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png?v=6">
+  
+  <link rel="stylesheet" href="/css/spider_verse.css">
+</head>
+<body>
+
+<div id="app-container">
+  <!-- SIDEBAR NAVIGATION (SLIDING / COLLAPSIBLE) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-wrap">
+        <img src="/assets/icon-192.png?v=6" class="sidebar-logo-img" alt="GAME-ROOM Logo" style="width:44px; height:44px; border-radius:10px; object-fit:cover; border:2px solid var(--sv-cyan); box-shadow:0 0 12px var(--sv-cyan-glow); flex-shrink:0;">
+        <div>
+          <div class="logo-text">GAME-ROOM's</div>
+          <span class="logo-sub">BACKLOG & GAMING HUB</span>
+        </div>
+      </div>
+      <button class="sidebar-collapse-btn" id="sidebar-close-btn" title="Свернуть меню">◀</button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">Игровой поток</div>
+      <a class="nav-item active" data-tab="playing">
+        <span>⚡</span> В процессе <span class="badge" id="badge-playing">0</span>
+      </a>
+      <a class="nav-item" data-tab="backlog">
+        <span>📚</span> Бэклог <span class="badge" id="badge-backlog">0</span>
+      </a>
+      <a class="nav-item" data-tab="wishlist">
+        <span>⭐</span> Вишлист <span class="badge" id="badge-wishlist">0</span>
+      </a>
+      <a class="nav-item" data-tab="completed">
+        <span>🏆</span> Пройдено <span class="badge" id="badge-completed">0</span>
+      </a>
+      <a class="nav-item" data-tab="paused">
+        <span>⏸️</span> Пауза / Дроп <span class="badge" id="badge-paused">0</span>
+      </a>
+
+      <div class="nav-section-title">Инструменты & AI</div>
+      <a class="nav-item" data-tab="rawg-search">
+        <span>🔍</span> RAWG.io Инструмент
+      </a>
+      <a class="nav-item" data-tab="ai-assistant">
+        <span>🤖</span> GigaChat AI Штурман <span class="badge" style="color:var(--sv-cyan);border-color:var(--sv-cyan);">AI</span>
+      </a>
+      <a class="nav-item" data-tab="cloud-sync">
+        <span>☁️</span> Облако, Бэкап & Импорт
+      </a>
+      <a class="nav-item" data-tab="stats">
+        <span>📊</span> Аналитика & Оценки
+      </a>
+      <a class="nav-item" data-tab="settings">
+        <span>⚙️</span> Настройки API
+      </a>
+    </nav>
+
+    <div class="sidebar-install-wrap" id="sidebar-install-wrap" style="padding: 0 16px 10px;">
+      <button type="button" class="sv-btn sv-btn-yellow sv-btn-sm sv-btn-glow" id="btn-pwa-install" onclick="app.installPwa()" style="width:100%; font-size:0.78rem;">
+        📲 Установить на телефон
+      </button>
+    </div>
+    <div class="sidebar-footer">
+      <div class="network-badge">
+        <span class="network-indicator"></span>
+        <span id="network-host-label">PORT 8080 // ONLINE</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN WRAPPER -->
+  <main class="main-wrapper">
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="menu-toggle-btn" id="menu-toggle-btn" title="Боковое меню">
+          <span>☰</span> <span>МЕНЮ</span>
+        </button>
+        <h1 class="view-heading" id="view-title">⚡ В ПРОЦЕССЕ</h1>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="sv-btn sv-btn-cyan sv-btn-sm topbar-btn" id="btn-quick-rawg"><span class="btn-icon">🔍</span> <span class="btn-text">Поиск RAWG</span></button>
+        <button class="sv-btn sv-btn-primary sv-btn-sm topbar-btn" id="btn-add-custom-game"><span class="btn-icon">+</span> <span class="btn-text">Добавить</span></button>
+      </div>
+    </header>
+
+    <!-- CONTENT VIEW AREA -->
+    <div class="content-view">
+      
+      <!-- TAB 1: NOW PLAYING -->
+      <section class="tab-pane active" id="tab-playing">
+        <div id="playing-hero-container" class="hero-playing-grid">
+          <!-- Rendered via JS -->
+        </div>
+        <div id="playing-empty-state" style="display:none; text-align:center; padding: 60px 20px;">
+          <h2 style="font-family:var(--font-comic); font-size:1.8rem; color:var(--sv-cyan); margin-bottom:12px;">НЕТ АКТИВНЫХ ИГР В ПРОЦЕССЕ</h2>
+          <p style="color:var(--sv-text-muted); max-width:500px; margin: 0 auto 24px;">Выберите игру из бэклога и нажмите «Начать прохождение» или найдите новинку через инструмент RAWG!</p>
+          <button class="sv-btn sv-btn-primary" onclick="app.switchTab('backlog')">Открыть Бэклог</button>
+        </div>
+      </section>
+
+      <!-- TAB 2: BACKLOG -->
+      <section class="tab-pane" id="tab-backlog">
+        <!-- RANDOMIZER WHEEL HERO BANNER -->
+        <div class="randomizer-banner">
+          <div class="randomizer-banner-left">
+            <div class="randomizer-badge-icon">🎡</div>
+            <div>
+              <h3 class="randomizer-banner-title">КОЛЕСО РАНДОМАЙЗЕРА // ВЫБОР СЛЕДУЮЩЕЙ ИГРЫ</h3>
+              <p class="randomizer-banner-desc">Сотни игр в бэклоге? Задай фильтры по времени, платформе, жанру и крути колесо фортуны с анимацией и трейлером!</p>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="sv-btn sv-btn-cyan sv-btn-sm" onclick="app.startBulkRawgEnrichment('backlog')" title="Автоматически найти обложки и данные в RAWG">
+              🖼️ Подтянуть обложки RAWG
+            </button>
+            <button type="button" class="sv-btn sv-btn-yellow sv-btn-glow" id="btn-open-wheel" onclick="app.openWheelModal()">
+              <span style="font-size:1.2rem; margin-right:4px;">⚡</span> КРУТИТЬ КОЛЕСО
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-group">
+            <div class="search-input-wrap">
+              <input type="text" class="sv-input" id="backlog-search" placeholder="Поиск по названию, жанру, заметкам...">
+            </div>
+            <select class="sv-select" id="backlog-platform-filter">
+              <option value="all">Все платформы</option>
+              <option value="PC">PC / Steam</option>
+              <option value="PlayStation 5">PlayStation 5</option>
+              <option value="Nintendo Switch">Nintendo Switch</option>
+              <option value="Meta Quest 3S VR">Meta Quest 3S VR</option>
+              <option value="Xbox Series S/X">Xbox Series S/X</option>
+            </select>
+            <select class="sv-select" id="backlog-genre-filter">
+              <option value="all">Все жанры</option>
+              <option value="Экшен">Экшен</option>
+              <option value="Приключения">Приключения</option>
+              <option value="Сюжетная">Сюжетная</option>
+              <option value="Ролевая">Ролевая (RPG)</option>
+              <option value="Шутер">Шутер</option>
+              <option value="Хоррор">Хоррор</option>
+              <option value="Открытый мир">Открытый мир</option>
+              <option value="Платформер">Платформер</option>
+              <option value="Головоломка">Головоломка</option>
+              <option value="Sci-Fi">Sci-Fi</option>
+              <option value="Киберпанк">Киберпанк</option>
+              <option value="Инди">Инди</option>
+              <option value="Стелс">Стелс</option>
+              <option value="Выживание">Выживание</option>
+              <option value="VR">VR</option>
+            </select>
+            <select class="sv-select" id="backlog-priority-filter">
+              <option value="all">Все приоритеты</option>
+              <option value="urgent">🔥 Срочный / Главный</option>
+              <option value="high">⚡ Высокий</option>
+              <option value="medium">⭐ Средний</option>
+              <option value="low">💤 Низкий</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <select class="sv-select" id="backlog-sort">
+              <option value="created_at_desc">Новые добавленные</option>
+              <option value="priority_desc">По приоритету</option>
+              <option value="playtime_asc">Время: сначала короткие</option>
+              <option value="playtime_desc">Время: сначала длинные</option>
+              <option value="rating_desc">По оценке RAWG</option>
+              <option value="title_asc">По алфавиту (А-Я)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="games-grid" id="backlog-grid">
+          <!-- Rendered via JS -->
+        </div>
+      </section>
+
+      <!-- TAB 3: WISHLIST -->
+      <section class="tab-pane" id="tab-wishlist">
+        <div class="filter-bar">
+          <div class="filter-group">
+            <input type="text" class="sv-input" id="wishlist-search" placeholder="Поиск в вишлисте...">
+            <select class="sv-select" id="wishlist-platform-filter">
+              <option value="all">Все платформы</option>
+              <option value="PC">PC</option>
+              <option value="PlayStation 5">PlayStation 5</option>
+              <option value="Nintendo Switch">Nintendo Switch</option>
+              <option value="Meta Quest 3S VR">Meta Quest 3S VR</option>
+            </select>
+          </div>
+          <div class="filter-group" style="flex-wrap:wrap; gap:8px;">
+            <button type="button" class="sv-btn sv-btn-yellow sv-btn-sm" onclick="app.moveAllWishlistToBacklog()">📚 Перенести все в бэклог</button>
+            <button type="button" class="sv-btn sv-btn-cyan sv-btn-sm" onclick="app.switchTab('rawg-search')">+ Найти в RAWG</button>
+            <button type="button" class="sv-btn sv-btn-outline sv-btn-sm" style="color:var(--sv-red); border-color:var(--sv-red);" onclick="app.clearStatusCategory('wishlist')" title="Очистить вишлист">🗑️ Очистить</button>
+          </div>
+        </div>
+
+        <div class="games-grid" id="wishlist-grid">
+          <!-- Rendered via JS -->
+        </div>
+      </section>
+
+      <!-- TAB 4: COMPLETED (HALL OF FAME WITH SVG RATINGS) -->
+      <section class="tab-pane" id="tab-completed">
+        <div class="filter-bar">
+          <div class="filter-group">
+            <input type="text" class="sv-input" id="completed-search" placeholder="Поиск среди пройденных...">
+            <select class="sv-select" id="completed-grade-filter">
+              <option value="all">Все оценки</option>
+              <option value="izumitelno">👑 Изумительно</option>
+              <option value="pohvalno">🥇 Похвально</option>
+              <option value="prohodnyak">🥈 Проходняк</option>
+              <option value="musor">🗑️ Мусор</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <select class="sv-select" id="completed-sort">
+              <option value="created_at_desc">Недавно завершенные</option>
+              <option value="grade_desc">По оценке (Изумительно -> Мусор)</option>
+              <option value="user_playtime_desc">По наигранному времени</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="games-grid" id="completed-grid">
+          <!-- Rendered via JS -->
+        </div>
+      </section>
+
+      <!-- TAB 5: PAUSED / DROPPED -->
+      <section class="tab-pane" id="tab-paused">
+        <div class="games-grid" id="paused-grid">
+          <!-- Rendered via JS -->
+        </div>
+      </section>
+
+      <!-- TAB 6: RAWG TOOL & INSTANT ADD -->
+      <section class="tab-pane" id="tab-rawg-search">
+        <div class="filter-bar">
+          <div class="filter-group" style="flex:1;">
+            <input type="text" class="sv-input" id="rawg-page-search" placeholder="Введите название игры (например: The Last of Us, Resident Evil, Ghost of Tsushima)..." style="font-size:1.05rem;">
+            <button class="sv-btn sv-btn-primary" id="btn-do-rawg-search">Найти в RAWG</button>
+          </div>
+        </div>
+        <div id="rawg-status-message" style="margin-bottom: 20px;"></div>
+        <div class="games-grid" id="rawg-results-grid">
+          <!-- Rendered via JS -->
+        </div>
+      </section>
+
+      <!-- TAB 7: GIGACHAT AI SMART ASSISTANT -->
+      <section class="tab-pane" id="tab-ai-assistant">
+        <div class="ai-container">
+          <div class="ai-header">
+            <div class="ai-title-wrap">
+              <div class="ai-avatar">🤖</div>
+              <div>
+                <h3 style="font-family:var(--font-comic); font-size:1.1rem; color:#fff;">GIGACHAT // ИГРОВОЙ ШТУРМАН</h3>
+                <span style="font-size:0.75rem; color:var(--sv-cyan);" id="ai-status-indicator">⚡ Контекст библиотеки синхронизирован (Dense Context)</span>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="sv-btn sv-btn-yellow sv-btn-sm" id="btn-ai-gamer-portrait">🧠 Портрет геймера</button>
+              <button class="sv-btn sv-btn-outline sv-btn-sm" id="btn-clear-ai-history">Очистить чат</button>
+            </div>
+          </div>
+
+          <div class="ai-chat-messages" id="ai-messages-list">
+            <!-- Messages rendered via JS / restored from DB -->
+          </div>
+
+          <div class="ai-suggestions-bar">
+            <button class="suggestion-chip" data-action="portrait" data-prompt="Построй подробный психологический портрет меня как геймера на основе пройденного и оценок 'Изумительно'.">🧠 Портрет геймера</button>
+            <button class="suggestion-chip" data-action="suggest_next" data-prompt="Какую игру из бэклога мне пройти следующей и почему? Учти время прохождения.">🎯 Что пройти следующим?</button>
+            <button class="suggestion-chip" data-action="tactical_advice" data-prompt="Дай тактический совет по активной игре: механики, билд, скрытые фишки без спойлеров.">⚡ Совет по активной игре</button>
+            <button class="suggestion-chip" data-action="backlog_plan" data-prompt="Рассчитай дорожную карту и график зачистки всего бэклога при темпе 10 часов в неделю.">📅 График зачистки бэклога</button>
+          </div>
+
+          <div class="ai-input-bar">
+            <input type="text" class="sv-input" id="ai-user-input" placeholder="Спроси о бэклоге, времени прохождения, тактике, лоре..." autocomplete="off">
+            <button class="sv-btn sv-btn-cyan" id="btn-send-ai">Отправить</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 8: CLOUD SYNC & FULL BUNDLE EXPORT/IMPORT -->
+      <section class="tab-pane" id="tab-cloud-sync">
+        <div class="settings-card">
+          <div class="settings-card-title">
+            <span>📦</span> ЕДИНЫЙ ПОЛНЫЙ ЭКСПОРТ И ИМПОРТ ВСЕХ ДАННЫХ
+          </div>
+          <p style="color:var(--sv-text-secondary); margin-bottom:18px; font-size:0.92rem;">
+            Выгрузка и загрузка абсолютно всех данных в одном файле: все игры со всеми статусами и обложками, система оценок StopGame, история игровых сессий, все API ключи и сохраненные аналитические ответы AI.
+          </p>
+          <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:12px;">
+            <a href="/api/export/full-bundle" class="sv-btn sv-btn-yellow" download>📥 Скачать полный бандл (.JSON)</a>
+            <button class="sv-btn sv-btn-cyan" id="btn-trigger-import">📤 Загрузить полный бандл (.JSON)</button>
+            <a href="/api/export/csv" class="sv-btn sv-btn-outline" download>📊 Экспорт таблицы (.CSV)</a>
+            <input type="file" id="json-file-input" accept=".json" style="display:none;">
+          </div>
+          <div style="font-size:0.78rem; color:var(--sv-text-muted);">
+            * Импорт восстанавливает структуру таблиц, API ключи и историю чата без потери данных.
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-title">
+            <span>☁️</span> СИНХРОНИЗАЦИЯ С ЯНДЕКС.ДИСКОМ
+            <span class="api-status-badge" id="yandex-connection-badge">Проверка...</span>
+          </div>
+          <p style="color:var(--sv-text-secondary); margin-bottom:20px; font-size:0.92rem;">
+            Автоматическое создание резервных копий бэклога в облачную папку Яндекс.Диска (`disk:/GameBacklog_Backups`).
+          </p>
+
+          <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:24px;">
+            <button class="sv-btn sv-btn-primary" id="btn-yandex-backup-now">🚀 Создать бэкап в Яндекс.Диск</button>
+            <button class="sv-btn sv-btn-cyan" id="btn-yandex-refresh-list">🔄 Обновить список копий</button>
+            <button class="sv-btn sv-btn-outline" onclick="app.switchTab('settings')">⚙️ Настроить OAuth токен</button>
+          </div>
+
+          <div id="yandex-disk-info" style="margin-bottom:20px; font-size:0.85rem; color:var(--sv-cyan);"></div>
+
+          <h4 style="font-family:var(--font-comic); color:var(--sv-yellow); margin-bottom:12px; text-transform:uppercase;">Облачные снимки на Яндекс.Диске</h4>
+          <div id="yandex-backups-container">
+            <div style="color:var(--sv-text-muted); font-size:0.85rem;">Загрузка списка копий...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 9: EXPANDED STATS & ANALYTICS -->
+      <section class="tab-pane" id="tab-stats">
+        <div class="stats-hero-row" id="stats-cards-container">
+          <!-- Rendered via JS -->
+        </div>
+
+        <!-- 4-Tier SVG Rating Distribution -->
+        <div class="settings-card">
+          <div class="settings-card-title">🏆 РАСПРЕДЕЛЕНИЕ ОЦЕНОК (STOPGAME SYSTEM)</div>
+          <div class="tier-stats-grid" id="tier-stats-container">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- Platforms Breakdown -->
+        <div class="settings-card">
+          <div class="settings-card-title">🎮 РАСПРЕДЕЛЕНИЕ ПО ПЛАТФОРМАМ</div>
+          <div id="platform-stats-chart" style="display:flex; flex-direction:column; gap:14px;"></div>
+        </div>
+
+        <!-- Top Genres -->
+        <div class="settings-card">
+          <div class="settings-card-title">🎬 ЛЮБИМЫЕ ЖАНРЫ</div>
+          <div id="genre-stats-chart" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
+        </div>
+      </section>
+
+      <!-- TAB 10: SETTINGS -->
+      <section class="tab-pane" id="tab-settings">
+        <div class="settings-card">
+          <div class="settings-card-title">🔑 API КЛЮЧИ & ИНТЕГРАЦИИ</div>
+          <p style="color:var(--sv-text-secondary); margin-bottom:24px; font-size:0.9rem;">
+            Укажите ваши рабочие ключи для полнофункциональной работы RAWG.io, GigaChat и Яндекс.Диска.
+          </p>
+
+          <form id="settings-form">
+            <div class="form-grid">
+              <div class="form-full">
+                <label class="form-label">RAWG.io API Key (Поиск игр, обложки, оценки и среднее время)</label>
+                <input type="text" class="sv-input" id="setting-rawg-key" placeholder="Пример: 3a1b2c4d5e6f7g8h9i0j...">
+                <div style="font-size:0.75rem; color:var(--sv-text-muted); margin-top:4px;">
+                  Бесплатный ключ: <a href="https://rawg.io/apidocs" target="_blank" style="color:var(--sv-cyan);">rawg.io/apidocs</a>
+                </div>
+              </div>
+
+              <div class="form-full">
+                <label class="form-label">YouTube Data API v3 Key (Авто-поиск и воспроизведение трейлеров игр)</label>
+                <input type="password" class="sv-input" id="setting-youtube-key" placeholder="Пример: AIzaSy...">
+                <div style="font-size:0.75rem; color:var(--sv-text-muted); margin-top:4px;">
+                  Ключ Google Cloud: <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:var(--sv-cyan);">console.cloud.google.com/apis/credentials</a> (Включите библиотеку «YouTube Data API v3»)
+                </div>
+              </div>
+
+              <div class="form-full">
+                <label class="form-label">GigaChat (Sber Giga API) Авторизационные данные / Ключ</label>
+                <input type="password" class="sv-input" id="setting-gigachat-key" placeholder="Авторизационные данные Base64 (Client Secret) или Access Token">
+                <div style="font-size:0.75rem; color:var(--sv-text-muted); margin-top:4px;">
+                  Личный кабинет: <a href="https://developers.sber.ru/studio" target="_blank" style="color:var(--sv-cyan);">Sber Studio (GigaChat API)</a>
+                </div>
+              </div>
+
+              <div>
+                <label class="form-label">GigaChat Scope (Тип аккаунта)</label>
+                <select class="sv-select" id="setting-gigachat-scope" style="width:100%;">
+                  <option value="GIGACHAT_API_PERS">GIGACHAT_API_PERS (Физические лица)</option>
+                  <option value="GIGACHAT_API_CORP">GIGACHAT_API_CORP (Юридические лица)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label">Имя пользователя для ассистента</label>
+                <input type="text" class="sv-input" id="setting-user-name" value="Aleksey">
+              </div>
+
+              <div class="form-full">
+                <label class="form-label">Яндекс.Диск OAuth Токен (Облачные бэкапы)</label>
+                <input type="password" class="sv-input" id="setting-yandex-token" placeholder="OAuth токен (y0_...)">
+                <div style="font-size:0.75rem; color:var(--sv-text-muted); margin-top:4px;">
+                  Токен можно получить на <a href="https://oauth.yandex.ru" target="_blank" style="color:var(--sv-cyan);">oauth.yandex.ru</a>
+                </div>
+              </div>
+
+              <div class="form-full">
+                <label class="form-label">Папка для бэкапов на Яндекс.Диске</label>
+                <input type="text" class="sv-input" id="setting-yandex-folder" value="disk:/GameBacklog_Backups">
+              </div>
+            </div>
+
+            <div style="margin-top:24px; display:flex; gap:12px;">
+              <button type="submit" class="sv-btn sv-btn-primary">💾 Сохранить настройки</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-title">📱 СИНХРОНИЗАЦИЯ С ANDROID (SYNC ENGINE)</div>
+          <p style="color:var(--sv-text-secondary); line-height:1.6; font-size:0.9rem;">
+            Для подключения Android-приложения <strong>Game-Room</strong> укажите этот токен и адрес сервера в настройках мобильного приложения:
+          </p>
+          <div style="margin-top:12px;">
+            <label class="form-label">Секретный Sync Token для Android:</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" class="sv-input" id="setting-sync-token" readonly style="font-family:monospace; color:var(--sv-cyan); background:rgba(0,0,0,0.6);" value="Загрузка...">
+              <button type="button" class="sv-btn sv-btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('setting-sync-token').value); app.showToast('Токен скопирован в буфер обмена!', 'success');">📋 Копировать</button>
+            </div>
+            <div style="font-size:0.75rem; color:var(--sv-text-muted); margin-top:6px;">
+              URL для ввода в Android: ваш Tailscale Funnel (например, <code>https://your-node.ts.net:8443</code>) или локальный IP (<code>http://192.168.1.X:8080</code>).
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-title">🌐 ДОСТУП СО СМАРТФОНА & TAILSCALE</div>
+          <p style="color:var(--sv-text-secondary); line-height:1.6; font-size:0.9rem;">
+            Сервер запущен на интерфейсе <code style="color:var(--sv-yellow); background:rgba(0,0,0,0.5); padding:2px 6px;">0.0.0.0:8080</code>.<br>
+            Чтобы заходить в приложение с мобильного телефона через любую сеть:<br>
+            1. Запустите <strong>Tailscale</strong> на ПК и смартфоне под одним логином.<br>
+            2. Откройте в браузере телефона: <code style="color:var(--sv-cyan); background:rgba(0,0,0,0.5); padding:2px 6px;">http://[Tailscale-IP-вашего-ПК]:8080</code>.
+          </p>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ==========================================================================
+     MODALS
+     ========================================================================== -->
+
+<!-- 1. ADD / EDIT GAME MODAL (WITH RUSSIAN GENRE SELECTION & SVG RATINGS) -->
+<div class="sv-modal-overlay" id="game-modal">
+  <div class="sv-modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="game-modal-title">⚡ ДОБАВИТЬ ИГРУ</h3>
+      <button class="modal-close-btn" onclick="app.closeModal('game-modal')">&times;</button>
+    </div>
+    <form id="game-form">
+      <input type="hidden" id="form-game-id">
+      <input type="hidden" id="form-rawg-id">
+      <input type="hidden" id="form-slug">
+      <input type="hidden" id="form-background-url">
+      <input type="hidden" id="form-rating-grade" value="">
+      <input type="hidden" id="form-genres" value="">
+
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-full">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label class="form-label" style="margin-bottom:0;">Название игры *</label>
+              <button type="button" class="sv-btn sv-btn-cyan sv-btn-sm" onclick="app.autoFillModalFromRawg()" style="padding:4px 10px; font-size:0.75rem;">
+                🔍 Авто-поиск в RAWG
+              </button>
+            </div>
+            <input type="text" class="sv-input" id="form-title" required placeholder="Например: Resident Evil 9: Requiem">
+          </div>
+
+          <div>
+            <label class="form-label">Статус</label>
+            <select class="sv-select" id="form-status" style="width:100%;">
+              <option value="playing">⚡ Сейчас играю</option>
+              <option value="backlog" selected>📚 В бэклоге</option>
+              <option value="wishlist">⭐ В вишлисте</option>
+              <option value="completed">🏆 Пройдено</option>
+              <option value="paused">⏸️ На паузе</option>
+              <option value="dropped">❌ Дропнуто</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="form-label">Приоритет</label>
+            <select class="sv-select" id="form-priority" style="width:100%;">
+              <option value="urgent">🔥 Срочный / Главный</option>
+              <option value="high">⚡ Высокий</option>
+              <option value="medium" selected>⭐ Средний</option>
+              <option value="low">💤 Низкий</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="form-label">Основная платформа</label>
+            <select class="sv-select" id="form-platform" style="width:100%;">
+              <option value="PC">PC (Steam / GOG / Epic)</option>
+              <option value="PlayStation 5">PlayStation 5</option>
+              <option value="Nintendo Switch">Nintendo Switch</option>
+              <option value="Meta Quest 3S VR">Meta Quest 3S VR</option>
+              <option value="Xbox Series S/X">Xbox Series S/X</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="form-label">Дата выхода</label>
+            <input type="date" class="sv-input" id="form-release-date">
+          </div>
+
+          <!-- RUSSIAN GENRE SELECTION & PRESETS (NO MANUAL TEXT INPUT) -->
+          <div class="form-full">
+            <label class="form-label">Жанры игры (выберите теги или готовый шаблон)</label>
+            <div class="genre-section-wrap">
+              <div class="genre-presets-row">
+                <span style="font-size:0.75rem; color:var(--sv-text-muted); align-self:center; font-weight:800;">Шаблоны:</span>
+                <button type="button" class="genre-preset-btn" onclick="app.applyGenrePreset('story_action')">🎬 Сюжетный экшен</button>
+                <button type="button" class="genre-preset-btn" onclick="app.applyGenrePreset('horror_survival')">👁️ Хоррор / Выживание</button>
+                <button type="button" class="genre-preset-btn" onclick="app.applyGenrePreset('open_rpg')">🗡️ RPG / Открытый мир</button>
+                <button type="button" class="genre-preset-btn" onclick="app.applyGenrePreset('scifi_cyber')">🚀 Sci-Fi / Киберпанк</button>
+                <button type="button" class="genre-preset-btn" onclick="app.applyGenrePreset('indie_puzzle')">🧩 Инди / Платформер</button>
+                <button type="button" class="genre-preset-btn" onclick="app.applyGenrePreset('slasher_souls')">⚔️ Слэшер / Souls-like</button>
+                <button type="button" class="genre-preset-btn" onclick="app.applyGenrePreset('clear')" style="color:var(--sv-red); border-color:var(--sv-red);">✖ Очистить</button>
+              </div>
+
+              <div class="genre-chips-cloud" id="genre-chips-container">
+                <!-- Genre Chips generated via JS -->
+              </div>
+              <div id="genre-selected-summary" style="margin-top:8px; font-size:0.8rem; color:var(--sv-cyan); font-weight:700;">
+                Выбрано: <em>не выбрано</em>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-full">
+            <label class="form-label">Разработчик / Издатель</label>
+            <input type="text" class="sv-input" id="form-developer" placeholder="Naughty Dog / PlayStation Publishing">
+          </div>
+
+          <div class="form-full">
+            <label class="form-label">Ссылка на обложку (URL)</label>
+            <input type="url" class="sv-input" id="form-cover-url" placeholder="https://media.rawg.io/...">
+          </div>
+
+          <div>
+            <label class="form-label">Примерное время: Сюжет (часы)</label>
+            <input type="number" step="0.5" class="sv-input" id="form-playtime-main" placeholder="15.0">
+          </div>
+
+          <div>
+            <label class="form-label">Ваше наигранное время (минуты)</label>
+            <input type="number" class="sv-input" id="form-user-playtime" placeholder="0">
+          </div>
+
+          <!-- 4-Tier SVG Rating Picker -->
+          <div class="form-full">
+            <label class="form-label">Оценка игры (StopGame Grade)</label>
+            <div class="rating-picker-row">
+              <div class="rating-picker-item" data-grade="izumitelno" onclick="app.selectModalGrade('izumitelno')">
+                <img src="/assets/ratings/izumitelno.svg" alt="Изумительно">
+                <span>Изумительно</span>
+              </div>
+              <div class="rating-picker-item" data-grade="pohvalno" onclick="app.selectModalGrade('pohvalno')">
+                <img src="/assets/ratings/pohvalno.svg" alt="Похвально">
+                <span>Похвально</span>
+              </div>
+              <div class="rating-picker-item" data-grade="prohodnyak" onclick="app.selectModalGrade('prohodnyak')">
+                <img src="/assets/ratings/prohodnyak.svg" alt="Проходняк">
+                <span>Проходняк</span>
+              </div>
+              <div class="rating-picker-item" data-grade="musor" onclick="app.selectModalGrade('musor')">
+                <img src="/assets/ratings/musor.svg" alt="Мусор">
+                <span>Мусор</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-full">
+            <label class="form-label">Личный отзыв / Впечатления</label>
+            <input type="text" class="sv-input" id="form-user-review" placeholder="Короткий вердикт о прохождении...">
+          </div>
+
+          <div class="form-full">
+            <label class="form-label">Заметки</label>
+            <textarea class="form-textarea" id="form-notes" placeholder="Особенности настройки графики, на чем проходить..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" class="sv-btn sv-btn-outline sv-btn-sm" id="modal-btn-delete" style="color:var(--sv-red); border-color:var(--sv-red); display:none;" onclick="app.deleteCurrentModalGame()">🗑️ Удалить игру</button>
+        <div style="display:flex; gap:10px; margin-left:auto;">
+          <button type="button" class="sv-btn sv-btn-outline" onclick="app.closeModal('game-modal')">Отмена</button>
+          <button type="submit" class="sv-btn sv-btn-primary">💾 Сохранить</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 2. QUICK PLAYTIME MODAL -->
+<div class="sv-modal-overlay" id="quick-time-modal">
+  <div class="sv-modal" style="max-width:440px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="quick-time-modal-title">⏱️ ДОБАВИТЬ ВРЕМЯ</h3>
+      <button class="modal-close-btn" onclick="app.closeModal('quick-time-modal')">&times;</button>
+    </div>
+    <form id="quick-time-form">
+      <input type="hidden" id="quick-time-game-id">
+      <div class="modal-body">
+        <p style="color:var(--sv-text-secondary); margin-bottom:16px;" id="quick-time-game-name"></p>
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:16px;">
+          <button type="button" class="sv-btn sv-btn-cyan" onclick="app.setQuickMinutes(15)">+15 минут</button>
+          <button type="button" class="sv-btn sv-btn-cyan" onclick="app.setQuickMinutes(30)">+30 минут</button>
+          <button type="button" class="sv-btn sv-btn-yellow" onclick="app.setQuickMinutes(60)">+1 час</button>
+          <button type="button" class="sv-btn sv-btn-yellow" onclick="app.setQuickMinutes(120)">+2 часа</button>
+        </div>
+
+        <label class="form-label">Произвольное время (минуты):</label>
+        <input type="number" class="sv-input" id="quick-minutes-input" value="30" required>
+
+        <label class="form-label" style="margin-top:12px;">Заметка к сессии:</label>
+        <input type="text" class="sv-input" id="quick-session-note" placeholder="Прошел главу 4...">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="sv-btn sv-btn-outline" onclick="app.closeModal('quick-time-modal')">Отмена</button>
+        <button type="submit" class="sv-btn sv-btn-primary">Записать</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 3. COMPLETE GAME MODAL WITH SVG RATING SELECTION -->
+<div class="sv-modal-overlay" id="complete-modal">
+  <div class="sv-modal" style="max-width:540px;">
+    <div class="modal-header">
+      <h3 class="modal-title">🏆 ПРОХОЖДЕНИЕ ЗАВЕРШЕНО!</h3>
+      <button class="modal-close-btn" onclick="app.closeModal('complete-modal')">&times;</button>
+    </div>
+    <form id="complete-form">
+      <input type="hidden" id="complete-game-id">
+      <input type="hidden" id="complete-rating-grade" value="izumitelno">
+
+      <div class="modal-body">
+        <p style="color:var(--sv-text-secondary); margin-bottom:18px;" id="complete-game-name"></p>
+
+        <label class="form-label">Выберите оценку игры (StopGame):</label>
+        <div class="rating-picker-row" style="margin-bottom:20px;">
+          <div class="rating-picker-item selected" id="c-grade-izumitelno" onclick="app.selectCompleteGrade('izumitelno')">
+            <img src="/assets/ratings/izumitelno.svg" alt="Изумительно">
+            <span>Изумительно</span>
+          </div>
+          <div class="rating-picker-item" id="c-grade-pohvalno" onclick="app.selectCompleteGrade('pohvalno')">
+            <img src="/assets/ratings/pohvalno.svg" alt="Похвально">
+            <span>Похвально</span>
+          </div>
+          <div class="rating-picker-item" id="c-grade-prohodnyak" onclick="app.selectCompleteGrade('prohodnyak')">
+            <img src="/assets/ratings/prohodnyak.svg" alt="Проходняк">
+            <span>Проходняк</span>
+          </div>
+          <div class="rating-picker-item" id="c-grade-musor" onclick="app.selectCompleteGrade('musor')">
+            <img src="/assets/ratings/musor.svg" alt="Мусор">
+            <span>Мусор</span>
+          </div>
+        </div>
+
+        <label class="form-label">Краткий отзыв / впечатления:</label>
+        <textarea class="form-textarea" id="complete-review-text" placeholder="Шедевр! Сюжет держит в напряжении от начала до конца..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="sv-btn sv-btn-outline" onclick="app.closeModal('complete-modal')">Отмена</button>
+        <button type="submit" class="sv-btn sv-btn-yellow">🏆 Зафиксировать прохождение</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- 4. YOUTUBE TRAILER & GAMEPLAY MODAL -->
+<div class="sv-modal-overlay" id="trailer-modal">
+  <div class="sv-modal sv-modal-video">
+    <div class="modal-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="video-modal-icon">🎬</span>
+        <div>
+          <h3 class="modal-title" id="trailer-modal-title">ТРЕЙЛЕР ИГРЫ</h3>
+          <div class="trailer-meta-subtitle" id="trailer-modal-meta">Загрузка информации...</div>
+        </div>
+      </div>
+      <button class="modal-close-btn" onclick="app.closeTrailerModal()">&times;</button>
+    </div>
+
+    <div class="modal-body" style="padding: 16px 20px;">
+      <!-- Video Mode Switcher -->
+      <div class="trailer-mode-bar">
+        <button type="button" class="trailer-mode-btn active" id="trailer-mode-trailer" onclick="app.switchTrailerMode('trailer')">🎬 Официальный трейлер</button>
+        <button type="button" class="trailer-mode-btn" id="trailer-mode-gameplay" onclick="app.switchTrailerMode('gameplay')">🎮 Геймплей / Прохождение</button>
+        <button type="button" class="trailer-mode-btn" id="trailer-mode-launch" onclick="app.switchTrailerMode('launch')">🔥 Релизный трейлер</button>
+        <button type="button" class="trailer-mode-btn" id="trailer-mode-review" onclick="app.switchTrailerMode('review')">🏆 Обзор StopGame</button>
+      </div>
+
+      <!-- Responsive 16:9 Video Frame Container -->
+      <div class="video-player-container" id="video-player-container">
+        <div class="video-loader" id="video-loader">
+          <div class="spinner-cyber"></div>
+          <span style="color:var(--sv-cyan); font-family:var(--font-comic); letter-spacing:1px;">ЗАГРУЗКА ВИДЕО С YOUTUBE...</span>
+        </div>
+        <iframe id="trailer-iframe" src="" title="Game Trailer" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        <div class="video-fallback-box" id="video-fallback-box" style="display:none;">
+          <div class="fallback-icon">⚠️</div>
+          <h4 id="video-fallback-title" style="font-family:var(--font-comic); color:var(--sv-yellow); margin-bottom:8px;">YouTube API Key не настроен</h4>
+          <p id="video-fallback-desc" style="color:var(--sv-text-secondary); font-size:0.9rem; max-width:480px; margin:0 auto 16px;">Укажите ключ YouTube API в Настройках для встроенного авто-воспроизведения или откройте поиск прямо на YouTube.</p>
+          <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+            <a id="video-fallback-btn" href="#" target="_blank" class="sv-btn sv-btn-primary">🔍 Смотреть на YouTube</a>
+            <button type="button" class="sv-btn sv-btn-outline" onclick="app.closeTrailerModal(); app.switchTab('settings')">⚙️ Открыть настройки</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Info & Related Choices -->
+      <div class="video-info-footer" id="video-info-footer">
+        <div class="video-now-playing-info">
+          <div id="video-playing-title" class="video-playing-title">Загрузка...</div>
+          <div id="video-playing-channel" class="video-playing-channel">Канал: ...</div>
+        </div>
+        <div class="video-quick-actions">
+          <a id="video-external-link" href="#" target="_blank" class="sv-btn sv-btn-outline sv-btn-sm" title="Открыть в новой вкладке YouTube">🔗 На YouTube</a>
+          <button id="video-action-play" class="sv-btn sv-btn-primary sv-btn-sm" style="display:none;" onclick="app.startPlayingFromTrailer()">⚡ Начать играть</button>
+        </div>
+      </div>
+
+      <!-- Alternate video suggestions chips -->
+      <div class="related-videos-bar" id="related-videos-bar" style="display:none;">
+        <span style="font-size:0.75rem; color:var(--sv-text-muted); font-weight:800; text-transform:uppercase;">Другие видео:</span>
+        <div id="related-videos-chips" class="related-chips-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. BACKLOG RANDOMIZER WHEEL MODAL -->
+<div class="sv-modal-overlay" id="wheel-modal">
+  <div class="sv-modal sv-modal-wheel">
+    <div class="modal-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="wheel-header-icon">🎡</span>
+        <div>
+          <h3 class="modal-title">КОЛЕСО СУДЬБЫ // РАНДОМАЙЗЕР БЭКЛОГА</h3>
+          <span class="wheel-subtitle" id="wheel-pool-stats">В пуле выбора: 0 игр</span>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button type="button" class="wheel-sound-toggle-btn" id="wheel-sound-toggle" onclick="app.toggleWheelSound()" title="Включить/выключить звук">
+          🔊 ЗВУК: ВКЛ
+        </button>
+        <button class="modal-close-btn" onclick="app.closeModal('wheel-modal')">&times;</button>
+      </div>
+    </div>
+
+    <div class="modal-body wheel-modal-body">
+      <!-- Filter Bar Inside Wheel Modal -->
+      <div class="wheel-filters-container">
+        <div class="wheel-filter-row">
+          <div class="wheel-filter-item">
+            <label class="wheel-filter-label">Платформа:</label>
+            <select class="sv-select sv-select-sm" id="wheel-filter-platform" onchange="app.updateWheelPool()">
+              <option value="all">Все платформы</option>
+              <option value="PC">PC / Steam</option>
+              <option value="PlayStation 5">PlayStation 5</option>
+              <option value="Nintendo Switch">Nintendo Switch</option>
+              <option value="Meta Quest 3S VR">Meta Quest 3S VR</option>
+              <option value="Xbox Series S/X">Xbox Series S/X</option>
+            </select>
+          </div>
+
+          <div class="wheel-filter-item">
+            <label class="wheel-filter-label">Длительность сюжета:</label>
+            <select class="sv-select sv-select-sm" id="wheel-filter-duration" onchange="app.updateWheelPool()">
+              <option value="all">Любая продолжительность</option>
+              <option value="short">⚡ Короткие (&lt; 6 часов)</option>
+              <option value="medium">⏱️ Средние (6 – 15 часов)</option>
+              <option value="long">🗡️ Объёмные (15 – 30 часов)</option>
+              <option value="epic">🌌 Эпические (30+ часов)</option>
+            </select>
+          </div>
+
+          <div class="wheel-filter-item">
+            <label class="wheel-filter-label">Жанр:</label>
+            <select class="sv-select sv-select-sm" id="wheel-filter-genre" onchange="app.updateWheelPool()">
+              <option value="all">Все жанры</option>
+              <option value="Экшен">Экшен</option>
+              <option value="Приключения">Приключения</option>
+              <option value="Сюжетная">Сюжетная</option>
+              <option value="Ролевая">Ролевая (RPG)</option>
+              <option value="Шутер">Шутер</option>
+              <option value="Хоррор">Хоррор</option>
+              <option value="Открытый мир">Открытый мир</option>
+              <option value="Платформер">Платформер</option>
+              <option value="Sci-Fi">Sci-Fi</option>
+              <option value="Киберпанк">Киберпанк</option>
+              <option value="Инди">Инди</option>
+              <option value="VR">VR</option>
+            </select>
+          </div>
+
+          <div class="wheel-filter-item">
+            <label class="wheel-filter-label">Приоритет:</label>
+            <select class="sv-select sv-select-sm" id="wheel-filter-priority" onchange="app.updateWheelPool()">
+              <option value="all">Все приоритеты</option>
+              <option value="urgent">🔥 Срочные / Главные</option>
+              <option value="high">⚡ Высокий и выше</option>
+              <option value="medium">⭐ Средний и выше</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Quick Filter Chips -->
+        <div class="wheel-chips-row">
+          <span style="font-size:0.75rem; color:var(--sv-text-muted); font-weight:800; align-self:center;">Быстрые пресеты:</span>
+          <button type="button" class="wheel-chip-btn" onclick="app.applyWheelPreset('quick')">⚡ Быстрый вечер (&lt; 10ч)</button>
+          <button type="button" class="wheel-chip-btn" onclick="app.applyWheelPreset('story')">🎬 Сюжетные</button>
+          <button type="button" class="wheel-chip-btn" onclick="app.applyWheelPreset('urgent')">🔥 Главный приоритет</button>
+          <button type="button" class="wheel-chip-btn" onclick="app.applyWheelPreset('reset')" style="color:var(--sv-red); border-color:var(--sv-red);">✖ Сброс</button>
+        </div>
+      </div>
+
+      <!-- Wheel Stage & Candidate Sidebar Layout -->
+      <div class="wheel-layout">
+        <!-- LEFT/CENTER: Canvas Wheel Area -->
+        <div class="wheel-stage-container">
+          <div class="wheel-canvas-wrapper" id="wheel-canvas-wrapper">
+            <div class="wheel-pointer" id="wheel-pointer">▼</div>
+            <canvas id="wheel-canvas" width="520" height="520"></canvas>
+            <button type="button" class="wheel-center-spin-btn" id="wheel-center-btn" onclick="app.spinWheel()">
+              <span>КРУТИТЬ!</span>
+            </button>
+          </div>
+
+          <div class="wheel-spin-controls">
+            <button type="button" class="sv-btn sv-btn-yellow sv-btn-lg wheel-spin-action-btn" id="wheel-main-spin-btn" onclick="app.spinWheel()">
+              <span>⚡ ЗАПУСТИТЬ РАНДОМАЙЗЕР</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- RIGHT: Candidate Pool Preview -->
+        <div class="wheel-candidates-sidebar">
+          <div class="candidates-header">
+            <span style="font-family:var(--font-comic); color:var(--sv-cyan); font-size:0.85rem;">ПРЕТЕНДЕНТЫ В КОЛЕСЕ (<span id="wheel-candidate-count">0</span>)</span>
+            <button type="button" class="candidates-select-all-btn" onclick="app.shuffleWheelPool()">🎲 Перемешать</button>
+          </div>
+          <div class="candidates-list" id="wheel-candidates-list">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- WINNER POPUP OVERLAY (REVEAL CARD) -->
+      <div class="wheel-winner-overlay" id="wheel-winner-overlay" style="display:none;">
+        <div class="wheel-winner-card">
+          <div class="winner-comic-badge">💥 ВЫБОР СДЕЛАН! ТВОЯ СЛЕДУЮЩАЯ ИГРА:</div>
+          
+          <div class="winner-card-grid">
+            <div class="winner-poster-wrap">
+              <img id="winner-poster-img" src="" alt="Winner Cover" class="winner-poster-img">
+              <div class="winner-poster-badges" id="winner-poster-badges"></div>
+            </div>
+
+            <div class="winner-info-wrap">
+              <h2 class="winner-game-title" id="winner-game-title">Название Игры</h2>
+              
+              <div class="winner-meta-row" id="winner-meta-row">
+                <!-- Genres, year, rating -->
+              </div>
+
+              <div class="winner-playtime-box">
+                <div class="winner-time-label">⏱️ Время сюжета:</div>
+                <div class="winner-time-value" id="winner-playtime-val">~15.0 часов</div>
+              </div>
+
+              <div class="winner-notes-box" id="winner-notes-box" style="display:none;">
+                <div style="font-size:0.75rem; color:var(--sv-yellow); font-weight:800;">📝 ВАША ЗАМЕТКА:</div>
+                <div id="winner-notes-text" style="color:var(--sv-text-secondary); font-size:0.85rem; font-style:italic;"></div>
+              </div>
+
+              <div class="winner-actions-row">
+                <button type="button" class="sv-btn sv-btn-primary" id="winner-btn-play" onclick="app.startPlayingFromWinner()">
+                  ⚡ Начать проходить!
+                </button>
+                <button type="button" class="sv-btn sv-btn-cyan" id="winner-btn-trailer" onclick="app.openTrailerFromWinner()">
+                  🎬 Смотреть трейлер
+                </button>
+                <button type="button" class="sv-btn sv-btn-yellow" onclick="app.spinWheelAgain()">
+                  🔄 Крутить ещё
+                </button>
+                <button type="button" class="sv-btn sv-btn-outline" onclick="app.closeWinnerOverlay()">
+                  ✖ Закрыть
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- 6. STYLIZED CONFIRMATION & ALERT DIALOG MODAL -->
+<div class="sv-modal-overlay" id="app-dialog-modal" style="z-index: 2000;">
+  <div class="sv-modal sv-modal-dialog" style="max-width: 480px;">
+    <div class="modal-header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span id="dialog-icon" style="font-size:1.5rem;">⚡</span>
+        <h3 class="modal-title" id="dialog-title">ПОДТВЕРЖДЕНИЕ</h3>
+      </div>
+      <button type="button" class="modal-close-btn" onclick="app.resolveDialog(false)">&times;</button>
+    </div>
+    <div class="modal-body" style="padding: 20px 24px;">
+      <p id="dialog-message" style="color:var(--sv-text-secondary); font-size:0.95rem; line-height:1.5; margin:0;"></p>
+    </div>
+    <div class="modal-footer" id="dialog-footer" style="padding:14px 24px; display:flex; justify-content:flex-end; gap:10px;">
+      <button type="button" class="sv-btn sv-btn-outline" id="dialog-btn-cancel" onclick="app.resolveDialog(false)">Отмена</button>
+      <button type="button" class="sv-btn sv-btn-primary" id="dialog-btn-confirm" onclick="app.resolveDialog(true)">Подтвердить</button>
+    </div>
+  </div>
+</div>
+
+<!-- FLOATING TOAST CONTAINER -->
+<div id="toast-container" class="toast-container"></div>
+
+
+<!-- 7. BULK RAWG METADATA & COVER ENRICHER MODAL -->
+<div class="sv-modal-overlay" id="enrich-modal" style="z-index: 2100;">
+  <div class="sv-modal" style="max-width: 520px;">
+    <div class="modal-header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:1.5rem;">🖼️</span>
+        <h3 class="modal-title">АВТО-ПОДТЯГИВАНИЕ ОБЛОЖЕК RAWG</h3>
+      </div>
+      <button type="button" class="modal-close-btn" onclick="app.stopBulkEnrichment()">&times;</button>
+    </div>
+    <div class="modal-body" style="padding: 20px 24px;">
+      <p style="color:var(--sv-text-secondary); font-size:0.9rem; margin-bottom:16px;" id="enrich-status-text">
+        Поиск обложек, жанров и времени прохождения для импортированных игр через RAWG API...
+      </p>
+
+      <div class="progress-bar-wrap" style="height:16px; margin-bottom:14px; background:var(--sv-bg-deep); border:1px solid var(--sv-border-bright);">
+        <div class="progress-bar-fill" id="enrich-progress-bar" style="width: 0%; background:linear-gradient(90deg, var(--sv-cyan), var(--sv-magenta));"></div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:800; margin-bottom:16px;">
+        <span style="color:var(--sv-cyan);" id="enrich-counts-label">Обработано: 0 / 0</span>
+        <span style="color:var(--sv-yellow);" id="enrich-percent-label">0%</span>
+      </div>
+
+      <div id="enrich-log-box" style="background:rgba(0,0,0,0.5); border:1px solid var(--sv-border); clip-path:var(--clip-badge); padding:10px 14px; max-height:160px; overflow-y:auto; font-size:0.8rem; color:var(--sv-text-muted); line-height:1.4;">
+        <div>Ожидание запуска...</div>
+      </div>
+    </div>
+    <div class="modal-footer" style="padding:14px 24px; display:flex; justify-content:space-between;">
+      <button type="button" class="sv-btn sv-btn-outline" id="enrich-stop-btn" onclick="app.stopBulkEnrichment()">Остановить</button>
+      <button type="button" class="sv-btn sv-btn-cyan" id="enrich-done-btn" style="display:none;" onclick="app.closeModal('enrich-modal')">Готово!</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="/js/app.js"></script>
+</body>
+</html>
