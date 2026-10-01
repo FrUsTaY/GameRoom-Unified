@@ -5,6 +5,21 @@
  * Backlog Randomizer Wheel, YouTube Video/Gameplay Player, RAWG Auto-Enricher, and PWA Support.
  */
 
+// Global 401 interceptor: redirect to /login if session expires or is missing
+(function() {
+  const _origFetch = window.fetch;
+  window.fetch = async function(...args) {
+    const res = await _origFetch.apply(this, args);
+    if (res.status === 401) {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+      if (!url.includes('/api/auth/login')) {
+        window.location.replace('/login');
+      }
+    }
+    return res;
+  };
+})();
+
 const app = {
   games: [],
   currentTab: 'playing',
@@ -52,7 +67,19 @@ const app = {
     clear: []
   },
 
-  init() {
+  async init() {
+    // Verify session status before rendering
+    try {
+      const authRes = await fetch('/api/auth/me');
+      if (!authRes.ok) {
+        window.location.replace('/login');
+        return;
+      }
+    } catch (e) {
+      window.location.replace('/login');
+      return;
+    }
+
     this.initPwa();
     this.bindEvents();
     this.renderGenreChips();
@@ -1523,9 +1550,23 @@ const app = {
   async loadSettings() {
     try {
       const res = await fetch('/api/settings');
+      if (res.status === 401) {
+        window.location.replace('/login');
+        return;
+      }
       const data = await res.json();
       const s = data.settings || {};
-      this.settings = s;
+      
+      this.settings = Object.assign({}, s, {
+        rawg_configured: data.rawg_configured || data.is_rawg_configured,
+        youtube_configured: data.youtube_configured || data.is_youtube_configured,
+        gigachat_configured: data.gigachat_configured || data.is_gigachat_configured,
+        yandex_configured: data.yandex_configured || data.is_yandex_configured,
+        is_rawg_configured: data.rawg_configured || data.is_rawg_configured,
+        is_youtube_configured: data.youtube_configured || data.is_youtube_configured,
+        is_gigachat_configured: data.gigachat_configured || data.is_gigachat_configured,
+        is_yandex_configured: data.yandex_configured || data.is_yandex_configured
+      });
 
       const rawgEl = document.getElementById('setting-rawg-key');
       const ytEl = document.getElementById('setting-youtube-key');
@@ -1535,31 +1576,62 @@ const app = {
       const yandexTokenEl = document.getElementById('setting-yandex-token');
       const yandexFolderEl = document.getElementById('setting-yandex-folder');
 
-      if (rawgEl && s.rawg_api_key) rawgEl.value = s.rawg_api_key;
-      if (ytEl && s.youtube_api_key) ytEl.value = s.youtube_api_key;
-      if (gigaKeyEl && s.gigachat_auth_key) gigaKeyEl.value = s.gigachat_auth_key;
+      if (rawgEl) {
+        rawgEl.value = '';
+        rawgEl.placeholder = (data.rawg_configured || data.is_rawg_configured)
+          ? '•••••••••••••••• (Ключ сохранён на сервере)'
+          : 'Пример: 3a1b2c4d5e6f7g8h9i0j...';
+      }
+      if (ytEl) {
+        ytEl.value = '';
+        ytEl.placeholder = (data.youtube_configured || data.is_youtube_configured)
+          ? '•••••••••••••••• (Ключ сохранён на сервере)'
+          : 'Пример: AIzaSy...';
+      }
+      if (gigaKeyEl) {
+        gigaKeyEl.value = '';
+        gigaKeyEl.placeholder = (data.gigachat_configured || data.is_gigachat_configured)
+          ? '•••••••••••••••• (Ключ сохранён на сервере)'
+          : 'Авторизационные данные Base64 (Client Secret)...';
+      }
       if (gigaScopeEl && s.gigachat_scope) gigaScopeEl.value = s.gigachat_scope;
       if (userEl && s.user_name) userEl.value = s.user_name;
-      if (yandexTokenEl && s.yandex_disk_token) yandexTokenEl.value = s.yandex_disk_token;
+      if (yandexTokenEl) {
+        yandexTokenEl.value = '';
+        yandexTokenEl.placeholder = (data.yandex_configured || data.is_yandex_configured)
+          ? '•••••••••••••••• (Токен сохранён на сервере)'
+          : 'OAuth токен (y0_...)';
+      }
       if (yandexFolderEl && s.yandex_backup_folder) yandexFolderEl.value = s.yandex_backup_folder;
 
       const syncTokenEl = document.getElementById('setting-sync-token');
-      if (syncTokenEl && s.gameroom_sync_token) syncTokenEl.value = s.gameroom_sync_token;
+      if (syncTokenEl) {
+        syncTokenEl.value = data.sync_token_configured
+          ? '•••••••••••••••• [Управляется сервером]'
+          : '•••••••••••••••• [Не настроен]';
+      }
     } catch (e) {
       console.error(e);
     }
   },
 
   async saveSettings() {
+    const rawgVal = (document.getElementById('setting-rawg-key')?.value || '').trim();
+    const ytVal = (document.getElementById('setting-youtube-key')?.value || '').trim();
+    const gigaVal = (document.getElementById('setting-gigachat-key')?.value || '').trim();
+    const yandexVal = (document.getElementById('setting-yandex-token')?.value || '').trim();
+
     const settingsPayload = {
-      rawg_api_key: (document.getElementById('setting-rawg-key')?.value || '').trim(),
-      youtube_api_key: (document.getElementById('setting-youtube-key')?.value || '').trim(),
-      gigachat_auth_key: (document.getElementById('setting-gigachat-key')?.value || '').trim(),
-      gigachat_scope: (document.getElementById('setting-gigachat-scope')?.value || '').trim(),
       user_name: (document.getElementById('setting-user-name')?.value || '').trim(),
-      yandex_disk_token: (document.getElementById('setting-yandex-token')?.value || '').trim(),
+      gigachat_scope: (document.getElementById('setting-gigachat-scope')?.value || '').trim(),
       yandex_backup_folder: (document.getElementById('setting-yandex-folder')?.value || '').trim()
     };
+
+    // Only send secret fields if user actually entered a new non-placeholder value
+    if (rawgVal && !rawgVal.startsWith('••')) settingsPayload.rawg_api_key = rawgVal;
+    if (ytVal && !ytVal.startsWith('••')) settingsPayload.youtube_api_key = ytVal;
+    if (gigaVal && !gigaVal.startsWith('••')) settingsPayload.gigachat_auth_key = gigaVal;
+    if (yandexVal && !yandexVal.startsWith('••')) settingsPayload.yandex_disk_token = yandexVal;
 
     try {
       const res = await fetch('/api/settings', {
@@ -1575,6 +1647,15 @@ const app = {
     } catch (e) {
       this.showAlert(e.message, 'ОШИБКА НАСТРОЕК', 'error');
     }
+  },
+
+  async logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+    window.location.replace('/login');
   },
 
   // --- STYLIZED DIALOGS & TOASTS ---
@@ -2356,7 +2437,8 @@ const app = {
   },
 
   async startBulkRawgEnrichment(status = null) {
-    if (!this.settings.rawg_api_key || !this.settings.rawg_api_key.trim()) {
+    const hasRawg = this.settings.rawg_configured || this.settings.is_rawg_configured || (this.settings.rawg_api_key && this.settings.rawg_api_key.trim());
+    if (!hasRawg) {
       this.showAlert('Для авто-загрузки обложек укажите бесплатный ключ RAWG API в Настройках.', 'ТРЕБУЕТСЯ RAWG API КЛЮЧ', 'warning');
       return;
     }

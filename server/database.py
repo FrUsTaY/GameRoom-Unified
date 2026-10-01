@@ -149,6 +149,20 @@ def init_db():
     ''')
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tombstones_deleted_at ON sync_tombstones(deleted_at)")
 
+    # Web Sessions table for secure server-side session authentication
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS web_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT DEFAULT NULL
+    )
+    ''')
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_web_sessions_token_hash ON web_sessions(token_hash)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_web_sessions_expires_at ON web_sessions(expires_at)")
+
+
     default_settings = {
         "rawg_api_key": "",
         "youtube_api_key": "",
@@ -783,6 +797,89 @@ def save_settings_dict(settings_dict: Dict[str, str]):
     conn.commit()
     conn.close()
 
+def save_safe_settings_dict(settings_dict: Dict[str, str]):
+    """
+    Saves non-secret settings normally.
+    For secret fields (rawg_api_key, youtube_api_key, gigachat_auth_key, yandex_disk_token):
+    - Replaces value if a new non-empty, unmasked string is provided.
+    - Preserves existing value if empty, whitespace, or masked placeholder.
+    - Never allows modifying internal web auth credentials or sync token via settings form.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    for k, v in settings_dict.items():
+        clean_key = str(k).strip()
+        # Security protection: Never allow overriding internal sync token or web auth credentials
+        if clean_key.lower().startswith("game_room_web_") or clean_key in (
+            "gameroom_sync_token", "web_password", "password_hash"
+        ):
+            continue
+        
+        # If it's a secret key
+        if clean_key in ("rawg_api_key", "youtube_api_key", "gigachat_auth_key", "yandex_disk_token"):
+            clean_v = str(v).strip()
+            # If empty, whitespace, or masked placeholder (starts with • or *), do NOT overwrite existing secret
+            if not clean_v or clean_v.startswith("••") or clean_v.startswith("***"):
+                continue
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (clean_key, clean_v))
+        else:
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (clean_key, str(v).strip()))
+    conn.commit()
+    conn.close()
+
+# --- Web Session Database Operations ---
+
+def create_web_session(token_hash: str, expires_at: str) -> int:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute(
+        "INSERT INTO web_sessions (token_hash, created_at, expires_at) VALUES (?, ?, ?)",
+        (token_hash, now_iso, expires_at)
+    )
+    session_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return session_id
+
+def get_web_session(token_hash: str) -> Optional[Dict[str, Any]]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, token_hash, created_at, expires_at, revoked_at FROM web_sessions WHERE token_hash = ?",
+        (token_hash,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def revoke_web_session(token_hash: str) -> bool:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute(
+        "UPDATE web_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL",
+        (now_iso, token_hash)
+    )
+    affected = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return affected
+
+def cleanup_expired_sessions() -> int:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor.execute(
+        "DELETE FROM web_sessions WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)",
+        (now_iso, now_iso)
+    )
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
+
 # --- AI History Operations ---
 
 def get_ai_history(limit: int = 30) -> List[Dict[str, Any]]:
@@ -821,7 +918,12 @@ def export_full_database_json() -> Dict[str, Any]:
     sessions = [dict(r) for r in cursor.fetchall()]
     
     cursor.execute("SELECT * FROM settings")
-    settings = [dict(r) for r in cursor.fetchall()]
+    settings = []
+    for r in cursor.fetchall():
+        k = str(r["key"]).lower()
+        if k.startswith("game_room_web_") or "password" in k or "session" in k:
+            continue
+        settings.append(dict(r))
 
     cursor.execute("SELECT * FROM ai_history")
     ai_history = [dict(r) for r in cursor.fetchall()]
@@ -1132,6 +1234,10 @@ def import_full_database_json(data: Dict[str, Any]) -> Dict[str, Any]:
     # 3. Import settings
     for st in data.get("settings", []):
         if isinstance(st, dict) and "key" in st and "value" in st:
+            k = str(st["key"]).lower()
+            # Security protection: Never allow importing web credentials, password hashes, or session tokens
+            if k.startswith("game_room_web_") or "password" in k or "session" in k or k == "gameroom_sync_token":
+                continue
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (st["key"], st["value"]))
             imported_settings += 1
 

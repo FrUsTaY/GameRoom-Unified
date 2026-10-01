@@ -180,3 +180,8 @@ class InitialSyncResponse(BaseModel):
     merged_count: int = 0
     created_count: int = 0
     games: List[Dict[str, Any]] = []
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+

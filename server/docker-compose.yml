@@ -14,6 +14,9 @@ services:
       - PORT=8080
       - BACKLOG_DB_PATH=/app/data/backlog.db
       - TZ=UTC
+      - GAME_ROOM_WEB_USERNAME=${GAME_ROOM_WEB_USERNAME:-}
+      - GAME_ROOM_WEB_PASSWORD_HASH=${GAME_ROOM_WEB_PASSWORD_HASH:-}
+      - GAMEROOM_SYNC_TOKEN=${GAMEROOM_SYNC_TOKEN:-}
     volumes:
       # Persistent storage on host for SQLite database and backups
       - ./data:/app/data

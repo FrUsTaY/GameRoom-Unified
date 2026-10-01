@@ -70,6 +70,9 @@
       <a class="nav-item" data-tab="settings">
         <span>⚙️</span> Настройки API
       </a>
+      <a class="nav-item" id="nav-logout" onclick="app.logout()" style="color:var(--sv-red, #ff2247); cursor:pointer;">
+        <span>🚪</span> Выйти
+      </a>
     </nav>
 
     <div class="sidebar-install-wrap" id="sidebar-install-wrap" style="padding: 0 16px 10px;">
@@ -443,17 +446,28 @@
         <div class="settings-card">
           <div class="settings-card-title">📱 СИНХРОНИЗАЦИЯ С ANDROID (SYNC ENGINE)</div>
           <p style="color:var(--sv-text-secondary); line-height:1.6; font-size:0.9rem;">
-            Для подключения Android-приложения <strong>Game-Room</strong> укажите этот токен и адрес сервера в настройках мобильного приложения:
+            Android-приложение <strong>Game-Room APK v1.0.0</strong> подключается напрямую через существующий Bearer Sync Token.
           </p>
           <div style="margin-top:12px;">
-            <label class="form-label">Секретный Sync Token для Android:</label>
+            <label class="form-label">Статус синхронизации Android:</label>
             <div style="display:flex; gap:8px;">
-              <input type="text" class="sv-input" id="setting-sync-token" readonly style="font-family:monospace; color:var(--sv-cyan); background:rgba(0,0,0,0.6);" value="Загрузка...">
-              <button type="button" class="sv-btn sv-btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('setting-sync-token').value); app.showToast('Токен скопирован в буфер обмена!', 'success');">📋 Копировать</button>
+              <input type="text" class="sv-input" id="setting-sync-token" readonly style="font-family:monospace; color:var(--sv-cyan); background:rgba(0,0,0,0.6);" value="•••••••••••••••• [Управляется сервером]">
             </div>
             <div style="font-size:0.75rem; color:var(--sv-text-muted); margin-top:6px;">
-              URL для ввода в Android: ваш Tailscale Funnel (например, <code>https://your-node.ts.net:8443</code>) или локальный IP (<code>http://192.168.1.X:8080</code>).
+              🔒 В целях безопасности реальный Sync Token скрыт от веб-интерфейса и хранится на сервере.
             </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-title">🔒 ВЕБ-АВТОРИЗАЦИЯ И СЕССИЯ</div>
+          <p style="color:var(--sv-text-secondary); line-height:1.6; font-size:0.9rem;">
+            Текущая веб-сессия защищена HttpOnly cookie. При выходе сессия будет отозвана на сервере.
+          </p>
+          <div style="margin-top:16px;">
+            <button type="button" class="sv-btn sv-btn-outline" style="border-color:var(--sv-red); color:var(--sv-red);" onclick="app.logout()">
+              🚪 Завершить веб-сессию (Выйти)
+            </button>
           </div>
         </div>
 

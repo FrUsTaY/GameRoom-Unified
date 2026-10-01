@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GAME-ROOM // ВХОД</title>
+  
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  
+  <link rel="stylesheet" href="/css/spider_verse.css">
+  
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 30%, #150f2f 0%, #07050e 70%);
+      padding: 20px;
+    }
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(20, 15, 40, 0.95);
+      border: 2px solid var(--sv-border-bright, #4e3d8f);
+      border-radius: 8px;
+      box-shadow: 0 0 30px rgba(0, 240, 255, 0.2), 0 20px 40px rgba(0,0,0,0.8);
+      padding: 36px 32px;
+      position: relative;
+      clip-path: var(--clip-cut-corner, polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)));
+    }
+    .login-container::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--sv-cyan, #00f0ff), var(--sv-magenta, #ff0055), var(--sv-yellow, #ffe600));
+    }
+    .login-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .login-title {
+      font-family: var(--font-comic, 'Russo One', sans-serif);
+      font-size: 1.8rem;
+      letter-spacing: 2px;
+      color: #fff;
+      text-transform: uppercase;
+      text-shadow: 2px 2px 0 var(--sv-magenta, #ff0055), -2px -2px 0 var(--sv-cyan, #00f0ff);
+      margin-bottom: 6px;
+    }
+    .login-subtitle {
+      font-size: 0.85rem;
+      color: var(--sv-text-secondary, #c9cdd8);
+      letter-spacing: 1px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--sv-cyan, #00f0ff);
+      margin-bottom: 8px;
+    }
+    .login-input {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(10, 7, 22, 0.9);
+      border: 1px solid var(--sv-border, #2e2358);
+      color: #fff;
+      font-size: 0.95rem;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .login-input:focus {
+      outline: none;
+      border-color: var(--sv-cyan, #00f0ff);
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+    }
+    .login-btn {
+      width: 100%;
+      padding: 14px;
+      margin-top: 10px;
+      background: linear-gradient(135deg, var(--sv-cyan, #00f0ff), #00a2ff);
+      color: #07050e;
+      border: none;
+      font-family: var(--font-comic, 'Russo One', sans-serif);
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+      text-transform: uppercase;
+      clip-path: var(--clip-btn, polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%));
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .login-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+      background: linear-gradient(135deg, #4ef4ff, var(--sv-cyan, #00f0ff));
+    }
+    .login-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .login-error {
+      display: none;
+      padding: 12px 14px;
+      background: rgba(255, 0, 85, 0.15);
+      border: 1px solid var(--sv-magenta, #ff0055);
+      color: #ff85a1;
+      font-size: 0.85rem;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      line-height: 1.4;
+      animation: fadeIn 0.25s ease-in-out;
+    }
+    .login-footer {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--sv-text-muted, #838b9e);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-header">
+      <div class="login-title">GAME-ROOM</div>
+      <div class="login-subtitle">АВТОРИЗАЦИЯ // ВЕБ-ДОСТУП</div>
+    </div>
+
+    <div class="login-error" id="login-error"></div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="username">Имя пользователя (Логин)</label>
+        <input 
+          type="text" 
+          id="username" 
+          name="username" 
+          class="login-input" 
+          placeholder="Введите логин" 
+          required 
+          autocomplete="username"
+          autofocus
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Пароль</label>
+        <input 
+          type="password" 
+          id="password" 
+          name="password" 
+          class="login-input" 
+          placeholder="Введите пароль" 
+          required 
+          autocomplete="current-password"
+        >
+      </div>
+
+      <button type="submit" class="login-btn" id="login-submit-btn">
+        <span>⚡ ВОЙТИ В СИСТЕМУ</span>
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <span>🔒 Персональный бэклог · Android Sync изолирован</span>
+    </div>
+  </div>
+
+  <script>
+    // Check if already authenticated
+    (async function() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated) {
+            window.location.replace('/');
+          }
+        }
+      } catch (e) {}
+    })();
+
+    const form = document.getElementById('login-form');
+    const errorBox = document.getElementById('login-error');
+    const submitBtn = document.getElementById('login-submit-btn');
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.style.display = 'block';
+    }
+
+    function clearError() {
+      errorBox.textContent = '';
+      errorBox.style.display = 'none';
+    }
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      clearError();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      if (!username || !password) {
+        showError('Пожалуйста, заполните логин и пароль.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>⏳ ПРОВЕРКА...</span>';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+
+        if (res.ok) {
+          submitBtn.innerHTML = '<span>✔ УСПЕШНО! ВХОДИМ...</span>';
+          window.location.replace('/');
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          showError(data.detail || 'Слишком много неудачных попыток. Пожалуйста, подождите 5 минут.');
+        } else if (res.status === 500) {
+          showError(data.detail || 'Ошибка конфигурации сервера: учётные данные веб-авторизации не настроены.');
+        } else {
+          showError(data.detail || 'Неверное имя пользователя или пароль.');
+        }
+      } catch (err) {
+        showError('Ошибка подключения к серверу. Проверьте интернет-соединение.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>⚡ ВОЙТИ В СИСТЕМУ</span>';
+      }
+    });
+  </script>
+</body>
+</html>

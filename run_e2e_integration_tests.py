@@ -28,9 +28,17 @@ def main():
     print(f"📁 Isolated Test DB: {test_db_path}")
 
     # Set environment variables for server process
+    import secrets
+    from argon2 import PasswordHasher
+    test_sync_token = "e2e_sync_token_" + secrets.token_hex(16)
+    test_pass_hash = PasswordHasher().hash("e2e_test_password")
+
     env = os.environ.copy()
     env["BACKLOG_DB_PATH"] = test_db_path
     env["PYTHONUNBUFFERED"] = "1"
+    env["GAMEROOM_SYNC_TOKEN"] = test_sync_token
+    env["GAME_ROOM_WEB_USERNAME"] = "e2e_admin"
+    env["GAME_ROOM_WEB_PASSWORD_HASH"] = test_pass_hash
 
     server_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server")
 
@@ -64,12 +72,9 @@ def main():
 
         print("✅ Server is online and responding!")
 
-        # 4. Fetch the generated Sync Token
-        with urllib.request.urlopen(f"{SERVER_URL}/api/settings", timeout=2) as resp:
-            settings_data = json.loads(resp.read().decode('utf-8'))
-            sync_token = settings_data.get("settings", {}).get("gameroom_sync_token")
-            assert sync_token, "Must obtain gameroom_sync_token from server"
-            print(f"🔑 Obtained Sync Token: {sync_token[:8]}...")
+        # 4. Use the configured Sync Token
+        sync_token = test_sync_token
+        print(f"🔑 Using Sync Token: {sync_token[:8]}...")
 
         # 5. Run the Node.js Real Android Sync Test Runner
         js_test_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_real_android_sync.js")

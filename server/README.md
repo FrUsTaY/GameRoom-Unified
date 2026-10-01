@@ -89,3 +89,30 @@ chmod +x run.sh
 - **RAWG.io API Key**: [rawg.io/apidocs](https://rawg.io/apidocs) — бесплатный поиск игр и обложек.
 - **GigaChat API**: [developers.sber.ru/studio](https://developers.sber.ru/studio) — авторизационные данные для AI-штурмана.
 - **Яндекс.Диск OAuth**: [oauth.yandex.ru](https://oauth.yandex.ru/) — облачные бэкапы в 1 клик.
+
+---
+
+## 🔒 Веб-авторизация и безопасность (Production)
+
+Веб-версия GameRoom защищена единой системой аутентификации:
+- **Web:** Вход по логину и паролю → серверная сессия в SQLite → `HttpOnly`, `SameSite=Strict` cookie.
+- **Android APK v1.0.0:** Существующая авторизация по `Authorization: Bearer <sync_token>` сохранена без изменений (не требует обновления APK).
+
+### Настройка учетных данных:
+1. Установите зависимости:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Сгенерируйте Argon2id хэш пароля:
+   ```bash
+   python generate_hash.py
+   ```
+3. Добавьте переменные в файл `.env` на сервере:
+   ```env
+   GAME_ROOM_WEB_USERNAME=ваш_логин
+   GAME_ROOM_WEB_PASSWORD_HASH=ваш_сгенерированный_хэш
+   ```
+4. Запустите или перезапустите Docker контейнер:
+   ```bash
+   docker compose up -d --build
+   ```

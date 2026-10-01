@@ -15,6 +15,17 @@ if (!syncToken) {
   process.exit(1);
 }
 
+// Ensure direct test assertions on protected endpoints include the Bearer Sync Token
+const originalFetch = globalThis.fetch;
+globalThis.fetch = function(url, options = {}) {
+  const opts = Object.assign({}, options);
+  opts.headers = Object.assign({}, opts.headers);
+  if (!opts.headers['Authorization'] && !opts.headers['authorization']) {
+    opts.headers['Authorization'] = `Bearer ${syncToken}`;
+  }
+  return originalFetch(url, opts);
+};
+
 // 1. Factory to create isolated Android Client instances
 function createAndroidClient(clientName = 'android-client-1') {
   const store = {};

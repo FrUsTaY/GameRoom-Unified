@@ -18,6 +18,7 @@ import rawg_service as rawg
 import gigachat_service as ai
 import yandex_disk_service as yandex
 import youtube_service as yt
+import security
 from fastapi.testclient import TestClient
 from main import app
 
@@ -35,7 +36,15 @@ class GameRoomTestSuite(unittest.TestCase):
                 pass
         db.DB_PATH = tmp_db
         db.init_db()
+
+        test_user = "test_suite_user"
+        test_pass = "test_suite_secret_pass"
+        os.environ["GAME_ROOM_WEB_USERNAME"] = test_user
+        os.environ["GAME_ROOM_WEB_PASSWORD_HASH"] = security.hash_password(test_pass)
+
         cls.client = TestClient(app)
+        login_resp = cls.client.post("/api/auth/login", json={"username": test_user, "password": test_pass})
+        assert login_resp.status_code == 200, f"Test client login failed: {login_resp.text}"
 
     def test_01_db_initialization_and_seed(self):
         games = db.get_games()
@@ -177,7 +186,14 @@ class GameRoomTestSuite(unittest.TestCase):
         self.assertEqual(get_res.status_code, 200)
         s_data = get_res.json()
         self.assertTrue(s_data.get("is_youtube_configured"))
-        self.assertEqual(s_data["settings"].get("youtube_api_key"), "AIzaSyFakeKeyTest12345")
+        self.assertTrue(s_data.get("youtube_configured"))
+        # Security verification: secrets must NOT be exposed in GET /api/settings
+        self.assertNotIn("youtube_api_key", s_data.get("settings", {}))
+        self.assertNotIn("rawg_api_key", s_data.get("settings", {}))
+        # Non-secret settings are safely returned
+        self.assertEqual(s_data["settings"].get("user_name"), "Alex")
+        # Internal DB correctly saved the secret
+        self.assertEqual(db.get_setting("youtube_api_key"), "AIzaSyFakeKeyTest12345")
 
     def test_09_full_bundle_export_import_roundtrip(self):
         db.save_settings_dict({
