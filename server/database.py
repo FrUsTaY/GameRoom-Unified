@@ -684,17 +684,19 @@ def delete_game_by_uuid(game_uuid: str, deleted_by: str = "web-admin", deleted_a
     conn.close()
     return True
 
-def log_playtime(game_id: int, added_minutes: int, note: str = "") -> Optional[Dict[str, Any]]:
+def log_playtime(game_id: int, added_minutes: int, note: str = "", updated_by: str = "web-admin") -> Optional[Dict[str, Any]]:
     conn = get_db_connection()
     cursor = conn.cursor()
-    now_str = datetime.now().isoformat()
+    now_utc_str = datetime.now(timezone.utc).isoformat()
     
     cursor.execute('''
     UPDATE games 
     SET user_playtime_minutes = MAX(0, user_playtime_minutes + ?),
-        last_played_at = ?
+        last_played_at = ?,
+        updated_at = ?,
+        updated_by = ?
     WHERE id = ?
-    ''', (added_minutes, now_str, game_id))
+    ''', (added_minutes, now_utc_str, now_utc_str, updated_by, game_id))
     
     if cursor.rowcount == 0:
         conn.close()
@@ -703,7 +705,7 @@ def log_playtime(game_id: int, added_minutes: int, note: str = "") -> Optional[D
     cursor.execute('''
     INSERT INTO play_sessions (game_id, duration_minutes, note, created_at)
     VALUES (?, ?, ?, ?)
-    ''', (game_id, added_minutes, note, now_str))
+    ''', (game_id, added_minutes, note, now_utc_str))
     
     conn.commit()
     conn.close()
@@ -1190,6 +1192,7 @@ def import_full_database_json(data: Dict[str, Any]) -> Dict[str, Any]:
 
     conn = get_db_connection()
     cursor = conn.cursor()
+    now_utc_str = datetime.now(timezone.utc).isoformat()
     
     imported_games = 0
     imported_sessions = 0
@@ -1198,6 +1201,25 @@ def import_full_database_json(data: Dict[str, Any]) -> Dict[str, Any]:
     
     # 1. Import games
     for g in data.get("games", []):
+        raw_uuid = g.get("uuid")
+        if raw_uuid and str(raw_uuid).strip():
+            game_uuid = str(raw_uuid).strip()
+        else:
+            game_uuid = str(uuid.uuid4())
+
+        created_at = g.get("created_at") or now_utc_str
+        updated_at = g.get("updated_at") or created_at
+        updated_by = g.get("updated_by") or "web-admin"
+        client_created_at = g.get("client_created_at") or created_at
+
+        platforms_val = g.get("platforms_list")
+        if isinstance(platforms_val, list):
+            platforms_list_json = json.dumps(platforms_val)
+        elif isinstance(platforms_val, str) and platforms_val.strip():
+            platforms_list_json = platforms_val
+        else:
+            platforms_list_json = json.dumps([g.get("platform", "PC")])
+
         cursor.execute('''
         INSERT OR REPLACE INTO games (
             id, title, slug, rawg_id, cover_url, background_url, status,
@@ -1205,21 +1227,23 @@ def import_full_database_json(data: Dict[str, Any]) -> Dict[str, Any]:
             publisher, rawg_rating, metacritic, playtime_main, playtime_extra,
             playtime_completionist, user_playtime_minutes, rating_grade, user_score,
             user_review, notes, is_favorite, priority, created_at,
-            started_at, completed_at, last_played_at
+            started_at, completed_at, last_played_at,
+            uuid, updated_at, updated_by, client_created_at
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''', (
             g.get("id"), g.get("title", ""), g.get("slug", ""), g.get("rawg_id"),
             g.get("cover_url", ""), g.get("background_url", ""), g.get("status", "backlog"),
-            g.get("platform", "PC"), g.get("platforms_list", "[]"), g.get("genres", ""),
+            g.get("platform", "PC"), platforms_list_json, g.get("genres", ""),
             g.get("release_date", ""), g.get("developer", ""), g.get("publisher", ""),
             g.get("rawg_rating", 0.0), g.get("metacritic", 0), g.get("playtime_main", 0.0),
             g.get("playtime_extra", 0.0), g.get("playtime_completionist", 0.0),
             g.get("user_playtime_minutes", 0), g.get("rating_grade", ""), g.get("user_score", 0),
             g.get("user_review", ""), g.get("notes", ""), g.get("is_favorite", 0), g.get("priority", "medium"),
-            g.get("created_at", ""), g.get("started_at", ""), g.get("completed_at", ""),
-            g.get("last_played_at", "")
+            created_at, g.get("started_at", ""), g.get("completed_at", ""),
+            g.get("last_played_at", ""),
+            game_uuid, updated_at, updated_by, client_created_at
         ))
         imported_games += 1
         
@@ -1260,18 +1284,38 @@ def import_full_database_json(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def move_games_status(from_status: str, to_status: str) -> int:
+def move_games_status(from_status: str, to_status: str, updated_by: str = "web-admin") -> int:
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE games SET status = ? WHERE status = ?", (to_status, from_status))
+    now_utc_str = datetime.now(timezone.utc).isoformat()
+    cursor.execute(
+        "UPDATE games SET status = ?, updated_at = ?, updated_by = ? WHERE status = ?",
+        (to_status, now_utc_str, updated_by, from_status)
+    )
     affected = cursor.rowcount
     conn.commit()
     conn.close()
     return affected
 
-def clear_games_status(status: str) -> int:
+def clear_games_status(status: str, deleted_by: str = "web-admin") -> int:
     conn = get_db_connection()
     cursor = conn.cursor()
+    cursor.execute("SELECT uuid, title FROM games WHERE status = ?", (status,))
+    rows = cursor.fetchall()
+    if not rows:
+        conn.close()
+        return 0
+        
+    now_utc_str = datetime.now(timezone.utc).isoformat()
+    for row in rows:
+        game_uuid = row["uuid"]
+        title = row["title"] or ""
+        if game_uuid:
+            cursor.execute(
+                "INSERT OR REPLACE INTO sync_tombstones (uuid, deleted_at, deleted_by, entity_type, title_backup) VALUES (?, ?, ?, 'game', ?)",
+                (game_uuid, now_utc_str, deleted_by, title)
+            )
+            
     cursor.execute("DELETE FROM games WHERE status = ?", (status,))
     affected = cursor.rowcount
     conn.commit()

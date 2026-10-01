@@ -238,9 +238,6 @@ class GameRoomTestSuite(unittest.TestCase):
         data = res.json()
         self.assertIn("success", data)
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_12_move_and_clear_status_endpoints(self):
         # Create test games
         g1 = db.create_game({"title": "MoveTestGame1", "status": "wishlist"})
@@ -265,3 +262,7 @@ if __name__ == "__main__":
         # Cleanup
         db.delete_game(g1["id"])
         db.delete_game(g2["id"])
+
+if __name__ == "__main__":
+    unittest.main()
+
