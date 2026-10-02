@@ -954,6 +954,10 @@ avgPlaytime: null
         const GAMES_PER_PAGE = 10;
         const [gamesPage, setGamesPage] = useState(1);
         const didMountGamesRef = useRef(false);
+        const gamesRef = useRef(games);
+        useEffect(() => { gamesRef.current = games; }, [games]);
+        const wishlistRef = useRef(wishlist);
+        useEffect(() => { wishlistRef.current = wishlist; }, [wishlist]);
         const [wishlistSort, setWishlistSort] = useState('date-asc'); // 'date-asc' или 'date-desc'
         const ITEMS_PER_PAGE = 10;
         const [wishlistPage, setWishlistPage] = useState(1);
@@ -1786,24 +1790,40 @@ if (!newGame.title || !newGame.title.trim()) {
     return;
 }
 const nowIso = new Date().toISOString();
+const MONTH_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+let computedCompletedAt = '';
+if (newGame.status === 'Пройдено') {
+    if (newGame.month && newGame.year) {
+        const mIdx = MONTH_RU.indexOf(newGame.month);
+        if (mIdx >= 0) {
+            const mStr = String(mIdx + 1).padStart(2, '0');
+            computedCompletedAt = `${mStr}.${newGame.year}`;
+        } else {
+            computedCompletedAt = newGame.completed_at || '';
+        }
+    } else if (newGame.year) {
+        computedCompletedAt = newGame.year;
+    } else {
+        computedCompletedAt = newGame.completed_at || '';
+    }
+}
+
 if (editingGame) {
     const existing = games.find(g => g.id === editingGame || g.uuid === editingGame);
     const itemUuid = existing?.uuid || existing?.id || (window.GameRoomSync ? window.GameRoomSync.generateUuid() : Date.now().toString());
     const grade = window.GameRoomSync ? window.GameRoomSync.parseRatingToGrade(newGame.rating).grade : (newGame.rating_grade || '');
-    const updatedGame = { ...newGame, id: editingGame, uuid: itemUuid, rating_grade: grade, updated_at: nowIso };
+    const updatedGame = { ...newGame, id: editingGame, uuid: itemUuid, rating_grade: grade, completed_at: computedCompletedAt, updated_at: nowIso };
     setGames(games.map(g => (g.id === editingGame || g.uuid === editingGame) ? updatedGame : g));
     if (window.GameRoomSync) {
         window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidGameToSyncItem(updatedGame));
-        triggerAutoSyncDebounced();
     }
 } else {
     const itemUuid = window.GameRoomSync ? window.GameRoomSync.generateUuid() : Date.now().toString();
     const grade = window.GameRoomSync ? window.GameRoomSync.parseRatingToGrade(newGame.rating).grade : (newGame.rating_grade || '');
-    const createdGame = { ...newGame, id: itemUuid, uuid: itemUuid, rating_grade: grade, created_at: nowIso, updated_at: nowIso };
+    const createdGame = { ...newGame, id: itemUuid, uuid: itemUuid, rating_grade: grade, completed_at: computedCompletedAt, created_at: nowIso, updated_at: nowIso };
     setGames([createdGame, ...games]);
     if (window.GameRoomSync) {
         window.GameRoomSync.enqueueAction('create', itemUuid, window.GameRoomSync.androidGameToSyncItem(createdGame));
-        triggerAutoSyncDebounced();
     }
     // Конфетти только при добавлении новой игры
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
@@ -1966,7 +1986,6 @@ setGames([...games, transferredGame]);
 setWishlist(wishlist.filter(g => g.id !== game.id && g.uuid !== itemUuid));
 if (window.GameRoomSync) {
     window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidGameToSyncItem(transferredGame));
-    triggerAutoSyncDebounced();
 }
 };
 const selectRAWGGameForWishlist = (game) => {
@@ -2077,7 +2096,7 @@ const handleRunDeltaSync = async (silent = false) => {
     setSyncState('syncing');
     if (!silent) setSyncMessageText('Синхронизируем изменения...');
     try {
-        const res = await window.GameRoomSync.performDeltaSync(syncServerUrl, syncToken, games, wishlist);
+        const res = await window.GameRoomSync.performDeltaSync(syncServerUrl, syncToken, gamesRef.current, wishlistRef.current);
         if (res.success) {
             setGames(res.games);
             setWishlist(res.wishlist);
@@ -2095,15 +2114,6 @@ const handleRunDeltaSync = async (silent = false) => {
     }
 };
 
-const triggerAutoSyncDebounced = () => {
-    if (autoSyncEnabled && syncServerUrl && syncToken) {
-        if (window._syncDebounceTimer) clearTimeout(window._syncDebounceTimer);
-        window._syncDebounceTimer = setTimeout(() => {
-            handleRunDeltaSync(true);
-        }, 500);
-    }
-};
-
 const handleRunInitialSync = async () => {
     if (!syncServerUrl.trim() || !syncToken.trim()) {
         setSyncState('error');
@@ -2116,7 +2126,7 @@ const handleRunInitialSync = async () => {
     setSyncState('syncing');
     setSyncMessageText('Выполняем объединение баз...');
     try {
-        const res = await window.GameRoomSync.performInitialSync(syncServerUrl, syncToken, games, wishlist);
+        const res = await window.GameRoomSync.performInitialSync(syncServerUrl, syncToken, gamesRef.current, wishlistRef.current);
         if (res.success) {
             setGames(res.games);
             setWishlist(res.wishlist);
@@ -2366,7 +2376,6 @@ if (isMountedRef.current) {
                 setWishlist(wishlist.filter(g => g.id !== gameId && g.uuid !== itemUuid));
                 if (window.GameRoomSync && itemUuid) {
                     window.GameRoomSync.enqueueAction('delete', itemUuid);
-                    triggerAutoSyncDebounced();
                 }
             } else {
                 const item = games.find(g => g.id === gameId || g.uuid === gameId);
@@ -2374,7 +2383,6 @@ if (isMountedRef.current) {
                 setGames(games.filter(g => g.id !== gameId && g.uuid !== itemUuid));
                 if (window.GameRoomSync && itemUuid) {
                     window.GameRoomSync.enqueueAction('delete', itemUuid);
-                    triggerAutoSyncDebounced();
                 }
             }
             setDeleteDialog({ show: false, gameId: null, isWishlist: false });
@@ -3145,7 +3153,6 @@ onClick={() => { setGamesPage(p => Math.min(totalGamesPages, p + 1)); }}
                                                         if (updatedItem && window.GameRoomSync) {
                                                             const itemUuid = updatedItem.uuid || updatedItem.id;
                                                             window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidWishlistToSyncItem(updatedItem));
-                                                            triggerAutoSyncDebounced();
                                                         }
                                                     }}
                                                     placeholder="ч"
@@ -4195,7 +4202,6 @@ setNewGame({
                             setWishlist(wishlist.map(g => (g.id === editingWishlistGame || g.uuid === editingWishlistGame) ? updatedWishlistItem : g));
                             if (window.GameRoomSync) {
                                 window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidWishlistToSyncItem(updatedWishlistItem));
-                                triggerAutoSyncDebounced();
                             }
                         } else {
                             const itemUuid = window.GameRoomSync ? window.GameRoomSync.generateUuid() : Date.now().toString();
@@ -4203,7 +4209,6 @@ setNewGame({
                             setWishlist([...wishlist, newWishlistItem]);
                             if (window.GameRoomSync) {
                                 window.GameRoomSync.enqueueAction('create', itemUuid, window.GameRoomSync.androidWishlistToSyncItem(newWishlistItem));
-                                triggerAutoSyncDebounced();
                             }
                         }
                         setIsWishlistModalOpen(false);

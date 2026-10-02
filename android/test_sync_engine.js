@@ -457,8 +457,42 @@ async function runTests() {
   assert.strictEqual(unratedSyncItem.rating_grade, '', 'Rating grade must be empty for -');
   console.log('✔ Android unrated (-) correctly clears rating_grade to empty string');
 
+  console.log('\n--- 21. Rule 16: Android month and year edit overrides stale completed_at ---');
+  const monthEditedGame = {
+    uuid: 'uuid-month-test-1',
+    title: 'Month Edit Game',
+    status: 'Пройдено',
+    month: 'Сентябрь',
+    year: '2026',
+    completed_at: '10.2026' // Stale completed_at from previous web sync
+  };
+  const monthSyncItem = sync.androidGameToSyncItem(monthEditedGame);
+  assert.strictEqual(monthSyncItem.completed_at, '09.2026', 'Editing month to Сентябрь must override stale completed_at 10.2026 with 09.2026');
+  console.log('✔ Android month/year edit correctly overrides stale completed_at');
+
+  console.log('\n--- 22. Rule 17: Android 5/10 rating maps to prohodnyak and roundtrips to 5/10 ---');
+  const fiveScoreGame = {
+    uuid: 'uuid-five-score',
+    title: 'Average Game',
+    status: 'Пройдено',
+    rating: '5/10'
+  };
+  const fiveSyncItem = sync.androidGameToSyncItem(fiveScoreGame);
+  assert.strictEqual(fiveSyncItem.user_score, 5);
+  assert.strictEqual(fiveSyncItem.rating_grade, 'prohodnyak');
+
+  const roundtripGame = sync.serverGameToAndroidGame({
+    uuid: 'uuid-five-score',
+    title: 'Average Game',
+    status: 'completed',
+    rating_grade: fiveSyncItem.rating_grade,
+    user_score: fiveSyncItem.user_score
+  });
+  assert.strictEqual(roundtripGame.rating, '5/10', '5/10 with prohodnyak must roundtrip back to 5/10 in Android');
+  console.log('✔ Android 5/10 maps to prohodnyak and roundtrips accurately to 5/10');
+
   console.log('\n============================================================');
-  console.log('ALL 20 TEST SUITES AND ALL 15 DISCREPANCY RULES PASSED! ✔');
+  console.log('ALL 22 TEST SUITES AND ALL 17 DISCREPANCY RULES PASSED! ✔');
   console.log('============================================================');
 }
 

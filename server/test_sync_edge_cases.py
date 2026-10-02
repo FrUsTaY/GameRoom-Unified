@@ -528,5 +528,93 @@ class TestSyncEdgeCases(unittest.TestCase):
         self.assertEqual(synced_game["rating_grade"], "pohvalno")
         self.assertEqual(synced_game["user_score"], 8)
 
+    def test_08_bidirectional_rating_and_month_sync_no_false_conflict(self):
+        """
+        Tests true bidirectional sync:
+        - Android modifies game from 10/10 to 5/10 and changes month from 10.2026 to 09.2026
+        - Server delta sync applies update directly without false conflict reversion
+        - Web subsequently modifies rating to 'izumitelno'
+        - Android delta sync receives the web modification cleanly
+        """
+        test_uuid = str(uuid.uuid4())
+        initial_sync_time = "2026-10-02T01:00:00+00:00"
+
+        # 1. Game on server initially set via Web to izumitelno (score 10) and month 10.2026
+        g = db.create_game({
+            "uuid": test_uuid,
+            "title": "Bidi Sync Test Game",
+            "status": "completed",
+            "rating_grade": "izumitelno",
+            "user_score": 10,
+            "completed_at": "10.2026",
+            "updated_at": initial_sync_time,
+            "updated_by": "web-admin"
+        })
+
+        client_id = "android-client-test-bidi"
+
+        # 2. Android client made a local change: score 5/10 -> user_score: 5, rating_grade: prohodnyak, completed_at: 09.2026
+        client_edit_time = "2026-10-02T01:05:00+00:00"
+        client_sync_time = "2026-10-02T01:05:05+00:00"
+
+        res = self.client.post("/api/sync", json={
+            "client_id": client_id,
+            "client_version": "1.0",
+            "client_time_now": client_sync_time,
+            "last_sync_timestamp": initial_sync_time,
+            "changes": {
+                "created": [],
+                "updated": [{
+                    "uuid": test_uuid,
+                    "title": "Bidi Sync Test Game",
+                    "status": "completed",
+                    "rating_grade": "prohodnyak",
+                    "user_score": 5,
+                    "completed_at": "09.2026",
+                    "updated_at": client_edit_time
+                }],
+                "deleted": []
+            }
+        }, headers=self.headers)
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["success"])
+        self.assertIn(test_uuid, data["ack"]["applied_updated"])
+        # Crucial: Must NOT be returned in server_changes.updated as a winning conflict!
+        updated_in_server_changes = [x for x in data["server_changes"]["updated"] if x["uuid"] == test_uuid]
+        self.assertEqual(len(updated_in_server_changes), 0, "Client update must not trigger false server-wins conflict")
+
+        # Verify DB is updated with client's new score and month
+        db_game = db.get_game_by_uuid(test_uuid)
+        self.assertEqual(db_game["rating_grade"], "prohodnyak")
+        self.assertEqual(db_game["user_score"], 5)
+        self.assertEqual(db_game["completed_at"], "09.2026")
+
+        # 3. Web changes rating from prohodnyak to izumitelno
+        server_sync_time_1 = data["server_time"]
+        db.update_game(g["id"], {
+            "rating_grade": "izumitelno",
+            "user_score": 10,
+            "updated_by": "web-admin"
+        })
+
+        # 4. Android syncs again
+        res2 = self.client.post("/api/sync", json={
+            "client_id": client_id,
+            "client_version": "1.0",
+            "client_time_now": datetime.now(timezone.utc).isoformat(),
+            "last_sync_timestamp": server_sync_time_1,
+            "changes": {"created": [], "updated": [], "deleted": []}
+        }, headers=self.headers)
+        self.assertEqual(res2.status_code, 200)
+        data2 = res2.json()
+        changes2 = data2["server_changes"]["updated"]
+        synced_game2 = next((x for x in changes2 if x["uuid"] == test_uuid), None)
+        self.assertIsNotNone(synced_game2)
+        self.assertEqual(synced_game2["rating_grade"], "izumitelno")
+        self.assertEqual(synced_game2["user_score"], 10)
+        self.assertEqual(synced_game2["completed_at"], "09.2026")
+
 if __name__ == "__main__":
     unittest.main()

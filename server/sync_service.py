@@ -93,6 +93,18 @@ def parse_rating_to_grade(rating_str: str) -> Tuple[str, int]:
     except Exception:
         return "", 0
 
+def parse_iso_dt(dt_str: Optional[str]) -> Optional[datetime]:
+    if not dt_str or not isinstance(dt_str, str):
+        return None
+    try:
+        clean = dt_str.strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(clean)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
 def calculate_effective_updated_at(item_updated_at: str, client_now_str: str, server_now_dt: datetime) -> str:
     """
     Calculates effective_updated_at using relative offset to compensate for client clock skew:
@@ -178,8 +190,21 @@ def process_sync(req: SyncRequest) -> SyncResponse:
             if existing:
                 # Conflict Resolution: LWW by effective_updated_at
                 existing_updated_at = existing.get("updated_at") or ""
-                if existing_updated_at and effective_updated_at < existing_updated_at:
-                    # Server version is newer: keep server version and mark for return to client
+                existing_dt = parse_iso_dt(existing_updated_at)
+                effective_dt = parse_iso_dt(effective_updated_at)
+                last_sync_dt = parse_iso_dt(last_sync_timestamp)
+
+                # A conflict only exists if the server was modified after client's last sync
+                server_modified_since_last_sync = False
+                if existing_dt:
+                    if last_sync_dt:
+                        if (existing_dt - last_sync_dt).total_seconds() > 1.0:
+                            server_modified_since_last_sync = True
+                    else:
+                        server_modified_since_last_sync = True
+
+                if server_modified_since_last_sync and existing_dt and effective_dt and effective_dt < existing_dt:
+                    # Server version is genuinely newer: keep server version and mark for return to client
                     ack.conflicts_resolved += 1
                     ack.applied_updated.append(item_uuid)
                     conflict_server_wins_uuids.add(item_uuid)
@@ -225,7 +250,7 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                     "user_score": final_score,
                     "notes": raw_notes,
                     "user_review": raw_review,
-                    "completed_at": item.completed_at or existing.get("completed_at", ""),
+                    "completed_at": item.completed_at if item.completed_at is not None else existing.get("completed_at", ""),
                     "is_favorite": item.is_favorite if item.is_favorite is not None else existing.get("is_favorite", 0),
                     "priority": item.priority or existing.get("priority", "medium"),
                     "updated_at": effective_updated_at,

@@ -296,15 +296,32 @@
 
     let completedAt = '';
     if (game.status === 'Пройдено') {
-      if (game.completed_at) {
-        completedAt = game.completed_at;
-      } else if (game.month && game.year) {
-        const MONTH_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-        const mIdx = MONTH_RU.indexOf(game.month);
-        if (mIdx >= 0) {
-          const mStr = String(mIdx + 1).padStart(2, '0');
-          completedAt = `${mStr}.${game.year}`;
+      const parsedComp = parseCompletionDate(game.completed_at);
+      if (game.month && game.year) {
+        // If user changed month/year in Android so it no longer matches existing completed_at: recompute
+        if (parsedComp.month && parsedComp.year && (game.month !== parsedComp.month || game.year !== parsedComp.year)) {
+          const MONTH_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+          const mIdx = MONTH_RU.indexOf(game.month);
+          if (mIdx >= 0) {
+            const mStr = String(mIdx + 1).padStart(2, '0');
+            completedAt = `${mStr}.${game.year}`;
+          } else {
+            completedAt = `${game.month}.${game.year}`;
+          }
+        } else if (game.completed_at) {
+          completedAt = game.completed_at;
+        } else {
+          const MONTH_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+          const mIdx = MONTH_RU.indexOf(game.month);
+          if (mIdx >= 0) {
+            const mStr = String(mIdx + 1).padStart(2, '0');
+            completedAt = `${mStr}.${game.year}`;
+          } else {
+            completedAt = `${game.month}.${game.year}`;
+          }
         }
+      } else if (game.completed_at) {
+        completedAt = game.completed_at;
       }
     }
 
