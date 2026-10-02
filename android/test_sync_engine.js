@@ -419,8 +419,46 @@ async function runTests() {
   assert.strictEqual(localStorage.getItem(sync.KEYS.LAST_SYNC), null, 'last_sync must be cleared after restore reset');
   console.log('✔ Yandex Restore queue invalidation and sync state reset verified');
 
+  console.log('\n--- 19. Rule 14: Server rating_grade change updates Android rating and overrides stale score ---');
+  const serverGameWithNewGrade = {
+    uuid: 'uuid-server-grade-1',
+    title: 'Web Edited Game',
+    status: 'completed',
+    rating_grade: 'musor',
+    user_score: 10 // Stale score from older sync
+  };
+  const androidGameFromMusor = sync.serverGameToAndroidGame(serverGameWithNewGrade);
+  assert.strictEqual(androidGameFromMusor.rating, '3/10', 'Web change to musor must update Android rating to 3/10 despite stale 10');
+  assert.strictEqual(androidGameFromMusor.rating_grade, 'musor');
+  assert.strictEqual(androidGameFromMusor.user_score, 3);
+
+  const serverGameCleared = {
+    uuid: 'uuid-server-grade-2',
+    title: 'Web Cleared Game',
+    status: 'completed',
+    rating_grade: '',
+    user_score: 10
+  };
+  const androidGameCleared = sync.serverGameToAndroidGame(serverGameCleared);
+  assert.strictEqual(androidGameCleared.rating, '-', 'Web clearing rating must set Android rating to -');
+  assert.strictEqual(androidGameCleared.rating_grade, '');
+  assert.strictEqual(androidGameCleared.user_score, 0);
+  console.log('✔ Server rating_grade changes correctly update Android rating and override stale score');
+
+  console.log('\n--- 20. Rule 15: Android setting rating to "-" clears rating_grade to empty ---');
+  const unratedGame = {
+    uuid: 'uuid-unrated-1',
+    title: 'Unrated Game',
+    rating: '-',
+    rating_grade: 'pohvalno' // stale grade
+  };
+  const unratedSyncItem = sync.androidGameToSyncItem(unratedGame);
+  assert.strictEqual(unratedSyncItem.user_score, 0, 'User score must be 0 for -');
+  assert.strictEqual(unratedSyncItem.rating_grade, '', 'Rating grade must be empty for -');
+  console.log('✔ Android unrated (-) correctly clears rating_grade to empty string');
+
   console.log('\n============================================================');
-  console.log('ALL 18 TEST SUITES AND ALL 13 DISCREPANCY RULES PASSED! ✔');
+  console.log('ALL 20 TEST SUITES AND ALL 15 DISCREPANCY RULES PASSED! ✔');
   console.log('============================================================');
 }
 

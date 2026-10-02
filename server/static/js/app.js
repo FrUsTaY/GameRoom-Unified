@@ -93,6 +93,21 @@ const app = {
     this.loadSettings();
     this.loadChatHistory();
     this.refreshAllData();
+
+    // Auto-refresh when tab gains focus or visibility, and periodically
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.refreshAllData();
+      }
+    });
+    window.addEventListener('focus', () => {
+      this.refreshAllData();
+    });
+    setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        this.refreshAllData();
+      }
+    }, 30000);
     
     // Set network label
     const host = window.location.hostname || 'localhost';
@@ -508,6 +523,20 @@ const app = {
         <span>${item.label}</span>
       </div>
     `;
+  },
+
+  gradeToScore(grade) {
+    const map = { izumitelno: 10, pohvalno: 8, prohodnyak: 6, musor: 3 };
+    return map[grade] || 0;
+  },
+
+  scoreToGrade(score) {
+    const s = parseInt(score, 10);
+    if (isNaN(s) || s <= 0) return '';
+    if (s >= 9) return 'izumitelno';
+    if (s >= 7) return 'pohvalno';
+    if (s >= 5) return 'prohodnyak';
+    return 'musor';
   },
 
   selectModalGrade(grade) {
@@ -1027,6 +1056,7 @@ const app = {
     await this.updateGameField(gameId, {
       status: 'completed',
       rating_grade: grade,
+      user_score: this.gradeToScore(grade),
       user_review: review || ''
     });
     this.closeModal('complete-modal');
@@ -1195,8 +1225,9 @@ const app = {
         
         this.setModalGenres(game.genres || '');
 
-        if (game.rating_grade) {
-          this.selectModalGrade(game.rating_grade);
+        const gradeToSelect = game.rating_grade || this.scoreToGrade(game.user_score);
+        if (gradeToSelect) {
+          this.selectModalGrade(gradeToSelect);
         }
       }
     } else {
@@ -1298,6 +1329,7 @@ const app = {
 
   async saveGameForm() {
     const id = document.getElementById('form-game-id').value;
+    const gradeVal = document.getElementById('form-rating-grade').value || '';
     const payload = {
       title: document.getElementById('form-title').value,
       status: document.getElementById('form-status').value,
@@ -1310,7 +1342,8 @@ const app = {
       cover_url: document.getElementById('form-cover-url').value,
       playtime_main: parseFloat(document.getElementById('form-playtime-main').value) || 0.0,
       user_playtime_minutes: parseInt(document.getElementById('form-user-playtime').value, 10) || 0,
-      rating_grade: document.getElementById('form-rating-grade').value || '',
+      rating_grade: gradeVal,
+      user_score: this.gradeToScore(gradeVal),
       user_review: document.getElementById('form-user-review').value || '',
       notes: document.getElementById('form-notes').value
     };

@@ -515,6 +515,41 @@ def get_game_by_uuid(game_uuid: str) -> Optional[Dict[str, Any]]:
         d["platforms_list"] = [d.get("platform", "PC")]
     return d
 
+GRADE_TO_SCORE = {
+    "izumitelno": 10,
+    "pohvalno": 8,
+    "prohodnyak": 6,
+    "musor": 3,
+    "": 0
+}
+
+def grade_to_score(grade: str, current_score: Optional[int] = None) -> int:
+    """Converts a StopGame grade into a 1-10 numerical score, preserving valid scores in range if possible."""
+    if not grade:
+        return 0
+    if current_score and current_score > 0:
+        if grade == "izumitelno" and current_score in (9, 10):
+            return current_score
+        elif grade == "pohvalno" and current_score in (7, 8):
+            return current_score
+        elif grade == "prohodnyak" and current_score in (5, 6):
+            return current_score
+        elif grade == "musor" and 1 <= current_score <= 4:
+            return current_score
+    return GRADE_TO_SCORE.get(grade, 0)
+
+def score_to_grade(score: int) -> str:
+    """Converts a 1-10 numerical score into a StopGame grade string."""
+    if score >= 9:
+        return "izumitelno"
+    elif score >= 7:
+        return "pohvalno"
+    elif score >= 5:
+        return "prohodnyak"
+    elif score >= 1:
+        return "musor"
+    return ""
+
 def create_game(game_data: Dict[str, Any]) -> Dict[str, Any]:
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -532,6 +567,16 @@ def create_game(game_data: Dict[str, Any]) -> Dict[str, Any]:
     started_at = game_data.get("started_at", "")
     if status == "playing" and not started_at:
         started_at = now_utc_str
+
+    # Ensure rating_grade and user_score consistency on creation
+    in_grade = game_data.get("rating_grade", "")
+    in_score = int(game_data.get("user_score") or 0)
+    if in_grade and in_score == 0:
+        in_score = grade_to_score(in_grade)
+    elif in_score > 0 and not in_grade:
+        in_grade = score_to_grade(in_score)
+    elif not in_grade:
+        in_score = 0
         
     cursor.execute('''
     INSERT INTO games (
@@ -562,8 +607,8 @@ def create_game(game_data: Dict[str, Any]) -> Dict[str, Any]:
         game_data.get("playtime_extra", 0.0),
         game_data.get("playtime_completionist", 0.0),
         game_data.get("user_playtime_minutes", 0),
-        game_data.get("rating_grade", ""),
-        game_data.get("user_score", 0),
+        in_grade,
+        in_score,
         game_data.get("user_review", ""),
         game_data.get("notes", ""),
         game_data.get("is_favorite", 0),
@@ -612,6 +657,28 @@ def update_game(game_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any
         updates["updated_at"] = now_utc_str
     if "updated_by" not in updates or not updates["updated_by"]:
         updates["updated_by"] = "web-admin"
+
+    # Rating synchronization: ensure rating_grade and user_score always stay consistent
+    has_grade_update = "rating_grade" in updates
+    has_score_update = "user_score" in updates
+    if has_grade_update and not has_score_update:
+        new_grade = updates.get("rating_grade") or ""
+        curr_score = current.get("user_score") or 0
+        updates["user_score"] = grade_to_score(new_grade, curr_score)
+    elif has_score_update and not has_grade_update:
+        new_score = int(updates.get("user_score") or 0)
+        updates["rating_grade"] = score_to_grade(new_score)
+    elif has_grade_update and has_score_update:
+        new_grade = updates.get("rating_grade") or ""
+        new_score = int(updates.get("user_score") or 0)
+        if not new_grade:
+            updates["user_score"] = 0
+        elif new_score == 0:
+            updates["user_score"] = grade_to_score(new_grade)
+        else:
+            calculated_grade = score_to_grade(new_score)
+            if calculated_grade != new_grade:
+                updates["user_score"] = grade_to_score(new_grade, new_score)
         
     set_clauses = []
     params = []

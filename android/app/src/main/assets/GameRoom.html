@@ -1794,6 +1794,7 @@ if (editingGame) {
     setGames(games.map(g => (g.id === editingGame || g.uuid === editingGame) ? updatedGame : g));
     if (window.GameRoomSync) {
         window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidGameToSyncItem(updatedGame));
+        triggerAutoSyncDebounced();
     }
 } else {
     const itemUuid = window.GameRoomSync ? window.GameRoomSync.generateUuid() : Date.now().toString();
@@ -1802,6 +1803,7 @@ if (editingGame) {
     setGames([createdGame, ...games]);
     if (window.GameRoomSync) {
         window.GameRoomSync.enqueueAction('create', itemUuid, window.GameRoomSync.androidGameToSyncItem(createdGame));
+        triggerAutoSyncDebounced();
     }
     // Конфетти только при добавлении новой игры
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
@@ -1964,6 +1966,7 @@ setGames([...games, transferredGame]);
 setWishlist(wishlist.filter(g => g.id !== game.id && g.uuid !== itemUuid));
 if (window.GameRoomSync) {
     window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidGameToSyncItem(transferredGame));
+    triggerAutoSyncDebounced();
 }
 };
 const selectRAWGGameForWishlist = (game) => {
@@ -2089,6 +2092,15 @@ const handleRunDeltaSync = async (silent = false) => {
         setSyncState('error');
         setSyncMessageText(`❌ Ошибка синхронизации: ${err.message}`);
         if (!silent) showMessage('error', `Ошибка синхронизации: ${err.message}`);
+    }
+};
+
+const triggerAutoSyncDebounced = () => {
+    if (autoSyncEnabled && syncServerUrl && syncToken) {
+        if (window._syncDebounceTimer) clearTimeout(window._syncDebounceTimer);
+        window._syncDebounceTimer = setTimeout(() => {
+            handleRunDeltaSync(true);
+        }, 500);
     }
 };
 
@@ -2354,6 +2366,7 @@ if (isMountedRef.current) {
                 setWishlist(wishlist.filter(g => g.id !== gameId && g.uuid !== itemUuid));
                 if (window.GameRoomSync && itemUuid) {
                     window.GameRoomSync.enqueueAction('delete', itemUuid);
+                    triggerAutoSyncDebounced();
                 }
             } else {
                 const item = games.find(g => g.id === gameId || g.uuid === gameId);
@@ -2361,6 +2374,7 @@ if (isMountedRef.current) {
                 setGames(games.filter(g => g.id !== gameId && g.uuid !== itemUuid));
                 if (window.GameRoomSync && itemUuid) {
                     window.GameRoomSync.enqueueAction('delete', itemUuid);
+                    triggerAutoSyncDebounced();
                 }
             }
             setDeleteDialog({ show: false, gameId: null, isWishlist: false });
@@ -3131,6 +3145,7 @@ onClick={() => { setGamesPage(p => Math.min(totalGamesPages, p + 1)); }}
                                                         if (updatedItem && window.GameRoomSync) {
                                                             const itemUuid = updatedItem.uuid || updatedItem.id;
                                                             window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidWishlistToSyncItem(updatedItem));
+                                                            triggerAutoSyncDebounced();
                                                         }
                                                     }}
                                                     placeholder="ч"
@@ -4180,6 +4195,7 @@ setNewGame({
                             setWishlist(wishlist.map(g => (g.id === editingWishlistGame || g.uuid === editingWishlistGame) ? updatedWishlistItem : g));
                             if (window.GameRoomSync) {
                                 window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidWishlistToSyncItem(updatedWishlistItem));
+                                triggerAutoSyncDebounced();
                             }
                         } else {
                             const itemUuid = window.GameRoomSync ? window.GameRoomSync.generateUuid() : Date.now().toString();
@@ -4187,6 +4203,7 @@ setNewGame({
                             setWishlist([...wishlist, newWishlistItem]);
                             if (window.GameRoomSync) {
                                 window.GameRoomSync.enqueueAction('create', itemUuid, window.GameRoomSync.androidWishlistToSyncItem(newWishlistItem));
+                                triggerAutoSyncDebounced();
                             }
                         }
                         setIsWishlistModalOpen(false);

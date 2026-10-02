@@ -478,5 +478,55 @@ class TestSyncEdgeCases(unittest.TestCase):
         updated_wish = db.get_game_by_uuid(wish_uuid)
         self.assertEqual(updated_wish["playtime_main"], 18.5)
 
+    def test_07_bidirectional_rating_synchronization(self):
+        """Verify rating_grade and user_score are automatically synchronized in db and sync"""
+        test_uuid = str(uuid.uuid4())
+        # 1. Create with rating_grade only -> user_score is calculated
+        game1 = db.create_game({
+            "uuid": test_uuid,
+            "title": "Rating Sync Test Game",
+            "status": "completed",
+            "rating_grade": "izumitelno"
+        })
+        self.assertEqual(game1["rating_grade"], "izumitelno")
+        self.assertEqual(game1["user_score"], 10)
+
+        # 2. Update with rating_grade = 'pohvalno' -> user_score becomes 8
+        game2 = db.update_game(game1["id"], {"rating_grade": "pohvalno"})
+        self.assertEqual(game2["rating_grade"], "pohvalno")
+        self.assertEqual(game2["user_score"], 8)
+
+        # 3. Update with rating_grade = 'musor' -> user_score becomes 3
+        game3 = db.update_game(game1["id"], {"rating_grade": "musor"})
+        self.assertEqual(game3["rating_grade"], "musor")
+        self.assertEqual(game3["user_score"], 3)
+
+        # 4. Update with rating_grade = '' -> user_score becomes 0
+        game4 = db.update_game(game1["id"], {"rating_grade": ""})
+        self.assertEqual(game4["rating_grade"], "")
+        self.assertEqual(game4["user_score"], 0)
+
+        # 5. Update with user_score = 6 (via Android score) -> rating_grade becomes 'prohodnyak'
+        game5 = db.update_game(game1["id"], {"user_score": 6})
+        self.assertEqual(game5["rating_grade"], "prohodnyak")
+        self.assertEqual(game5["user_score"], 6)
+
+        # 6. Delta sync client receiving server updated rating_grade
+        sync_client_now = datetime.now(timezone.utc).isoformat()
+        db.update_game(game1["id"], {"rating_grade": "pohvalno", "updated_by": "web-admin"})
+        res = self.client.post("/api/sync", json={
+            "client_id": "test-device-rating-sync",
+            "client_version": "1.0",
+            "client_time_now": sync_client_now,
+            "last_sync_timestamp": "2020-01-01T00:00:00+00:00",
+            "changes": {"created": [], "updated": [], "deleted": []}
+        }, headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        changes = res.json()["server_changes"]["updated"]
+        synced_game = next((g for g in changes if g["uuid"] == test_uuid), None)
+        self.assertIsNotNone(synced_game)
+        self.assertEqual(synced_game["rating_grade"], "pohvalno")
+        self.assertEqual(synced_game["user_score"], 8)
+
 if __name__ == "__main__":
     unittest.main()

@@ -245,13 +245,25 @@
   }
 
   function gradeToRatingStr(grade, userScore) {
-    if (userScore && userScore > 0) return `${userScore}/10`;
+    if (grade === '' || grade === '-' || !grade) {
+      if (grade === undefined && userScore && userScore > 0) {
+        const s = parseInt(userScore, 10);
+        if (!isNaN(s) && s >= 1 && s <= 10) return `${s}/10`;
+      }
+      return '-';
+    }
+    const numScore = parseInt(userScore, 10);
     switch (grade) {
-      case 'izumitelno': return '10/10';
-      case 'pohvalno': return '8/10';
-      case 'prohodnyak': return '6/10';
-      case 'musor': return '3/10';
-      default: return '-';
+      case 'izumitelno':
+        return (numScore === 9 || numScore === 10) ? `${numScore}/10` : '10/10';
+      case 'pohvalno':
+        return (numScore === 7 || numScore === 8) ? `${numScore}/10` : '8/10';
+      case 'prohodnyak':
+        return (numScore === 5 || numScore === 6) ? `${numScore}/10` : '6/10';
+      case 'musor':
+        return (numScore >= 1 && numScore <= 4) ? `${numScore}/10` : '3/10';
+      default:
+        return '-';
     }
   }
 
@@ -271,8 +283,16 @@
     const itemUuid = game.uuid || game.id || generateUuid();
     const playtimeMinutes = Math.round(parseFloat(game.time || 0) * 60);
     const parsed = parseRatingToGrade(game.rating);
-    const userScore = parsed.score || parseUserScore(game.rating);
-    const ratingGrade = parsed.grade || game.rating_grade || '';
+    let userScore = parsed.score || parseUserScore(game.rating);
+    let ratingGrade = parsed.grade;
+    if (!game.rating || game.rating === '-') {
+      userScore = 0;
+      ratingGrade = '';
+    } else if (!ratingGrade && userScore > 0) {
+      ratingGrade = parseRatingToGrade(`${userScore}/10`).grade;
+    } else if (!ratingGrade) {
+      ratingGrade = game.rating_grade || '';
+    }
 
     let completedAt = '';
     if (game.status === 'Пройдено') {
@@ -341,6 +361,7 @@
   function serverGameToAndroidGame(sGame) {
     const hours = (Math.max(0, sGame.user_playtime_minutes || 0) / 60.0).toFixed(1);
     const ratingStr = gradeToRatingStr(sGame.rating_grade, sGame.user_score);
+    const parsedBack = parseRatingToGrade(ratingStr);
     const androidStatus = STATUS_SERVER_TO_ANDROID[sGame.status] || 'В процессе';
 
     // Strictly parse completion date ONLY from completed_at
@@ -354,8 +375,8 @@
       status: androidStatus,
       time: hours,
       rating: ratingStr,
-      rating_grade: sGame.rating_grade || '',
-      user_score: sGame.user_score || 0,
+      rating_grade: parsedBack.grade || (ratingStr === '-' ? '' : (sGame.rating_grade || '')),
+      user_score: parsedBack.score || (ratingStr === '-' ? 0 : (sGame.user_score || 0)),
       note: sGame.user_review || sGame.notes || '',
       month: compMonth,
       year: compYear,

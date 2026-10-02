@@ -192,11 +192,12 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                 # Rating preservation & update
                 if item.user_score is not None and item.user_score > 0:
                     final_score = item.user_score
-                    if item.rating_grade:
-                        final_grade = item.rating_grade
-                    else:
-                        final_grade, _ = parse_rating_to_grade(f"{final_score}/10")
-                elif item.user_score == 0 and item.rating_grade == "":
+                    calc_grade, _ = parse_rating_to_grade(f"{final_score}/10")
+                    final_grade = calc_grade if calc_grade else (item.rating_grade or "")
+                elif item.rating_grade:
+                    final_grade = item.rating_grade
+                    final_score = db.grade_to_score(final_grade, existing.get("user_score"))
+                elif item.user_score == 0 or item.rating_grade == "":
                     final_score = 0
                     final_grade = ""
                 else:
@@ -278,8 +279,11 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                 norm_status = normalize_status(item.status)
                 final_grade = item.rating_grade or ""
                 final_score = item.user_score or 0
-                if not final_grade and final_score > 0:
-                    final_grade, _ = parse_rating_to_grade(f"{final_score}/10")
+                if final_score > 0:
+                    calc_grade, _ = parse_rating_to_grade(f"{final_score}/10")
+                    final_grade = calc_grade if calc_grade else final_grade
+                elif final_grade:
+                    final_score = db.grade_to_score(final_grade)
 
                 new_notes = item.notes or ""
                 new_review = item.user_review or ""
