@@ -1789,14 +1789,16 @@ const nowIso = new Date().toISOString();
 if (editingGame) {
     const existing = games.find(g => g.id === editingGame || g.uuid === editingGame);
     const itemUuid = existing?.uuid || existing?.id || (window.GameRoomSync ? window.GameRoomSync.generateUuid() : Date.now().toString());
-    const updatedGame = { ...newGame, id: editingGame, uuid: itemUuid, updated_at: nowIso };
+    const grade = window.GameRoomSync ? window.GameRoomSync.parseRatingToGrade(newGame.rating).grade : (newGame.rating_grade || '');
+    const updatedGame = { ...newGame, id: editingGame, uuid: itemUuid, rating_grade: grade, updated_at: nowIso };
     setGames(games.map(g => (g.id === editingGame || g.uuid === editingGame) ? updatedGame : g));
     if (window.GameRoomSync) {
         window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidGameToSyncItem(updatedGame));
     }
 } else {
     const itemUuid = window.GameRoomSync ? window.GameRoomSync.generateUuid() : Date.now().toString();
-    const createdGame = { ...newGame, id: itemUuid, uuid: itemUuid, created_at: nowIso, updated_at: nowIso };
+    const grade = window.GameRoomSync ? window.GameRoomSync.parseRatingToGrade(newGame.rating).grade : (newGame.rating_grade || '');
+    const createdGame = { ...newGame, id: itemUuid, uuid: itemUuid, rating_grade: grade, created_at: nowIso, updated_at: nowIso };
     setGames([createdGame, ...games]);
     if (window.GameRoomSync) {
         window.GameRoomSync.enqueueAction('create', itemUuid, window.GameRoomSync.androidGameToSyncItem(createdGame));
@@ -2300,6 +2302,15 @@ if (isMountedRef.current) {
     if (appData.showRecommendAnswer !== undefined) setShowRecommendAnswer(appData.showRecommendAnswer);
     if (appData.yearSummary !== undefined) setYearSummary(appData.yearSummary);
     if (appData.monthSummary !== undefined) setMonthSummary(appData.monthSummary);
+
+    if (window.GameRoomSync) {
+        if (typeof window.GameRoomSync.resetSyncState === 'function') {
+            window.GameRoomSync.resetSyncState();
+        } else if (typeof window.GameRoomSync.clearSyncQueue === 'function') {
+            window.GameRoomSync.clearSyncQueue();
+            localStorage.removeItem('game_room_last_sync');
+        }
+    }
 
     showMessage('success', `✅ Данные успешно загружены! (копия от ${new Date(appData.exportDate).toLocaleString()})`);
 }
@@ -3108,7 +3119,19 @@ onClick={() => { setGamesPage(p => Math.min(totalGamesPages, p + 1)); }}
                                                     value={game.avgPlaytime ?? ''}
                                                     onChange={e => {
                                                         const val = e.target.value ? parseFloat(e.target.value) : null;
-                                                        setWishlist(prev => prev.map(g => g.id === game.id ? { ...g, avgPlaytime: val } : g));
+                                                        const nowIso = new Date().toISOString();
+                                                        let updatedItem = null;
+                                                        setWishlist(prev => prev.map(g => {
+                                                            if (g.id === game.id) {
+                                                                updatedItem = { ...g, avgPlaytime: val, updated_at: nowIso };
+                                                                return updatedItem;
+                                                            }
+                                                            return g;
+                                                        }));
+                                                        if (updatedItem && window.GameRoomSync) {
+                                                            const itemUuid = updatedItem.uuid || updatedItem.id;
+                                                            window.GameRoomSync.enqueueAction('update', itemUuid, window.GameRoomSync.androidWishlistToSyncItem(updatedItem));
+                                                        }
                                                     }}
                                                     placeholder="ч"
                                                 />
@@ -3926,7 +3949,11 @@ setNewGame({...newGame, year: val});
                                         <p className="text-xs font-black text-slate-400 mb-2 tracking-widest">ОЦЕНКА</p>
                                         <CustomSelect
                                             value={newGame.rating}
-                                            onChange={e => setNewGame({...newGame, rating: e.target.value})}
+                                            onChange={e => {
+                                                const rVal = e.target.value;
+                                                const grade = window.GameRoomSync ? window.GameRoomSync.parseRatingToGrade(rVal).grade : '';
+                                                setNewGame({...newGame, rating: rVal, rating_grade: grade});
+                                            }}
                                             options={[
                                                 ...[10,9,8,7,6,5,4,3,2,1].map(n => ({ value: `${n}/10`, label: `${n}/10` })),
                                                 { value: "-", label: "— (без оценки)" }

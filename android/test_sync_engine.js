@@ -369,8 +369,58 @@ async function runTests() {
   });
   console.log('✔ Empty completion date is correctly kept empty and not replaced by release date');
 
+  console.log('\n--- 16. Rule 11: Android Rating 10/10 -> 3/10 updates rating_grade to musor ---');
+  const highRating = sync.parseRatingToGrade('10/10');
+  assert.strictEqual(highRating.grade, 'izumitelno');
+  assert.strictEqual(highRating.score, 10);
+
+  const lowRating = sync.parseRatingToGrade('3/10');
+  assert.strictEqual(lowRating.grade, 'musor');
+  assert.strictEqual(lowRating.score, 3);
+
+  const midRating1 = sync.parseRatingToGrade('8/10');
+  assert.strictEqual(midRating1.grade, 'pohvalno');
+
+  const midRating2 = sync.parseRatingToGrade('5/10');
+  assert.strictEqual(midRating2.grade, 'prohodnyak');
+
+  const changedGame = {
+    id: 'game-rating-test',
+    uuid: 'uuid-rating-1234',
+    title: 'Cyber Game',
+    rating: '3/10',
+    rating_grade: 'izumitelno' // stale grade from previous sync
+  };
+  const changedSyncItem = sync.androidGameToSyncItem(changedGame);
+  assert.strictEqual(changedSyncItem.user_score, 3);
+  assert.strictEqual(changedSyncItem.rating_grade, 'musor', 'Changing 10/10 to 3/10 must recalculate rating_grade to musor');
+  console.log('✔ Rating change 10/10 -> 3/10 correctly recalculates rating_grade to musor');
+
+  console.log('\n--- 17. Rule 12: Wishlist avgPlaytime sync mapping ---');
+  const wishlistWithAvg = {
+    id: 'wish-avg-1',
+    uuid: 'uuid-wish-avg',
+    title: 'Expedition 33',
+    platform: 'Домашний ПК',
+    avgPlaytime: 25.5
+  };
+  const wishSyncItem = sync.androidWishlistToSyncItem(wishlistWithAvg);
+  assert.strictEqual(wishSyncItem.playtime_main, 25.5, 'Wishlist avgPlaytime must map to playtime_main');
+  console.log('✔ Wishlist avgPlaytime sync mapping verified');
+
+  console.log('\n--- 18. Rule 13: Yandex Restore state reset and queue invalidation ---');
+  sync.enqueueAction('update', 'stale-uuid-999', { title: 'Pre-Restore Modification' });
+  localStorage.setItem(sync.KEYS.LAST_SYNC, '2026-10-01T12:00:00Z');
+  assert.ok(sync.getSyncQueue().length > 0, 'Queue must have pending action before restore');
+  assert.ok(localStorage.getItem(sync.KEYS.LAST_SYNC), 'Last sync must be set before restore');
+
+  sync.resetSyncState();
+  assert.strictEqual(sync.getSyncQueue().length, 0, 'Queue must be empty after restore reset');
+  assert.strictEqual(localStorage.getItem(sync.KEYS.LAST_SYNC), null, 'last_sync must be cleared after restore reset');
+  console.log('✔ Yandex Restore queue invalidation and sync state reset verified');
+
   console.log('\n============================================================');
-  console.log('ALL 15 TEST SUITES AND ALL 10 DISCREPANCY RULES PASSED! ✔');
+  console.log('ALL 18 TEST SUITES AND ALL 13 DISCREPANCY RULES PASSED! ✔');
   console.log('============================================================');
 }
 

@@ -338,6 +338,12 @@ const app = {
         this.saveSettings();
       });
     }
+
+    // Auto-formatting for Month/Year input (form-completed-at)
+    const completedAtInput = document.getElementById('form-completed-at');
+    if (completedAtInput) {
+      this.attachMonthYearAutoFormat(completedAtInput);
+    }
   },
 
   // --- RUSSIAN GENRE CHIPS & PRESETS ---
@@ -1225,6 +1231,52 @@ const app = {
       }
     } catch (e) {}
     return trimmed;
+  },
+
+  attachMonthYearAutoFormat(inputEl) {
+    let isDeleting = false;
+
+    inputEl.addEventListener('keydown', (e) => {
+      isDeleting = (e.key === 'Backspace' || e.key === 'Delete');
+    });
+
+    const formatValue = (raw) => {
+      if (!raw) return '';
+      if (raw.includes('.')) {
+        const parts = raw.split('.');
+        const mm = parts[0].replace(/\D/g, '').slice(0, 2);
+        const yyyy = (parts[1] || '').replace(/\D/g, '').slice(0, 4);
+        if (parts.length > 1) {
+          return `${mm}.${yyyy}`;
+        }
+        return mm;
+      }
+      const digits = raw.replace(/\D/g, '').slice(0, 6);
+      if (digits.length > 2) {
+        return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+      } else if (digits.length === 2 && !isDeleting) {
+        return `${digits}.`;
+      }
+      return digits;
+    };
+
+    inputEl.addEventListener('input', (e) => {
+      if (isDeleting && e.inputType && e.inputType.startsWith('delete')) {
+        return;
+      }
+      const formatted = formatValue(inputEl.value);
+      if (inputEl.value !== formatted) {
+        inputEl.value = formatted;
+      }
+    });
+
+    inputEl.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const pasteText = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+      const formatted = formatValue(pasteText);
+      inputEl.value = formatted;
+      inputEl.dispatchEvent(new Event('change'));
+    });
   },
 
   openQuickTimeModal(gameId, gameTitle) {

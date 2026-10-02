@@ -131,6 +131,11 @@
     localStorage.removeItem(SYNC_STORAGE_KEYS.SYNC_QUEUE);
   }
 
+  function resetSyncState() {
+    clearSyncQueue();
+    localStorage.removeItem(SYNC_STORAGE_KEYS.LAST_SYNC);
+  }
+
   // --- Entity Mapping Helpers ---
 
   const STATUS_ANDROID_TO_SERVER = {
@@ -250,10 +255,24 @@
     }
   }
 
+  function parseRatingToGrade(ratingStr) {
+    if (!ratingStr || ratingStr === '-') return { grade: '', score: 0 };
+    const clean = String(ratingStr).split('/')[0].trim();
+    const val = parseFloat(clean);
+    if (isNaN(val)) return { grade: '', score: 0 };
+    const score = Math.round(val);
+    if (val >= 8.5) return { grade: 'izumitelno', score: score };
+    if (val >= 6.8) return { grade: 'pohvalno', score: score };
+    if (val >= 4.8) return { grade: 'prohodnyak', score: score };
+    return { grade: 'musor', score: score };
+  }
+
   function androidGameToSyncItem(game, clientSeq) {
     const itemUuid = game.uuid || game.id || generateUuid();
     const playtimeMinutes = Math.round(parseFloat(game.time || 0) * 60);
-    const userScore = parseUserScore(game.rating);
+    const parsed = parseRatingToGrade(game.rating);
+    const userScore = parsed.score || parseUserScore(game.rating);
+    const ratingGrade = parsed.grade || game.rating_grade || '';
 
     let completedAt = '';
     if (game.status === 'Пройдено') {
@@ -278,7 +297,7 @@
       platforms_list: [game.platform || 'Домашний ПК'],
       user_playtime_minutes: playtimeMinutes,
       playtime_main: parseFloat(game.avgPlaytime || 0),
-      rating_grade: game.rating_grade || '',
+      rating_grade: ratingGrade,
       user_score: userScore,
       cover_url: game.coverUrl || '',
       background_url: game.coverUrl || '',
@@ -689,6 +708,8 @@
     serverGameToAndroidWishlist: serverGameToAndroidWishlist,
     normalizePlatformServerToAndroid: normalizePlatformServerToAndroid,
     parseCompletionDate: parseCompletionDate,
+    parseRatingToGrade: parseRatingToGrade,
+    resetSyncState: resetSyncState,
     STATUS_SERVER_TO_ANDROID: STATUS_SERVER_TO_ANDROID,
     STATUS_ANDROID_TO_SERVER: STATUS_ANDROID_TO_SERVER,
     checkServerStatus: checkServerStatus,

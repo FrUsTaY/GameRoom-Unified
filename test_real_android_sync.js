@@ -543,8 +543,104 @@ async function runTests() {
   assert.strictEqual(wukongStillGone, undefined, "Wukong must NOT be resurrected by stale update!");
   console.log("✔ Tombstone protection passed! Stale update did not resurrect deleted entity.\n");
 
+  // -------------------------------------------------------------
+  // Test 14: Android Rating change 10/10 -> 3/10 updates rating_grade to musor on Web
+  // -------------------------------------------------------------
+  console.log("▶ [Test 14] Android updates game rating 10/10 -> 3/10, sync updates Web rating_grade to 'musor'...");
+  const ratingTestUuid = engine.generateUuid();
+  const initialRatingGame = {
+    id: ratingTestUuid,
+    uuid: ratingTestUuid,
+    title: "Elden Ring Rating Test",
+    platform: "PC",
+    status: "Пройдено",
+    time: "50.0",
+    rating: "10/10",
+    rating_grade: "izumitelno",
+    user_score: 10
+  };
+  client1.games.unshift(initialRatingGame);
+  engine.enqueueAction('create', ratingTestUuid, engine.androidGameToSyncItem(initialRatingGame));
+  const initRateSync = await engine.performDeltaSync(serverUrl, syncToken, client1.games, client1.wishlist);
+  assert.strictEqual(initRateSync.success, true);
+
+  const serverInitialGame = (await (await fetch(`${serverUrl}/api/games`)).json()).games.find(g => g.uuid === ratingTestUuid);
+  assert.strictEqual(serverInitialGame.rating_grade, "izumitelno", "Initial rating_grade must be izumitelno");
+  assert.strictEqual(serverInitialGame.user_score, 10, "Initial user_score must be 10");
+
+  // Android changes rating from 10/10 to 3/10
+  const updatedRatingGame = Object.assign({}, initialRatingGame, {
+    rating: "3/10",
+    rating_grade: engine.parseRatingToGrade("3/10").grade,
+    updated_at: new Date().toISOString()
+  });
+  client1.games = client1.games.map(g => g.uuid === ratingTestUuid ? updatedRatingGame : g);
+  engine.enqueueAction('update', ratingTestUuid, engine.androidGameToSyncItem(updatedRatingGame));
+
+  const ratingDeltaSync = await engine.performDeltaSync(serverUrl, syncToken, client1.games, client1.wishlist);
+  assert.strictEqual(ratingDeltaSync.success, true);
+
+  const serverUpdatedGame = (await (await fetch(`${serverUrl}/api/games`)).json()).games.find(g => g.uuid === ratingTestUuid);
+  assert.strictEqual(serverUpdatedGame.user_score, 3, "Server user_score must be updated to 3");
+  assert.strictEqual(serverUpdatedGame.rating_grade, "musor", "Server rating_grade must be updated to 'musor'");
+  console.log("✔ Android rating 10/10 -> 3/10 correctly updated Web rating_grade to 'musor'!\n");
+
+  // -------------------------------------------------------------
+  // Test 15: Android Wishlist avgPlaytime -> Sync -> Server playtime_main
+  // -------------------------------------------------------------
+  console.log("▶ [Test 15] Android modifies Wishlist avgPlaytime -> Sync -> Server updates playtime_main...");
+  const wishPlaytimeUuid = engine.generateUuid();
+  const wishPlaytimeItem = {
+    id: wishPlaytimeUuid,
+    uuid: wishPlaytimeUuid,
+    title: "Ghost of Yotei",
+    platform: "PlayStation 5",
+    expectedMonth: "Ноябрь",
+    expectedYear: "2026",
+    avgPlaytime: null
+  };
+  client1.wishlist.unshift(wishPlaytimeItem);
+  engine.enqueueAction('create', wishPlaytimeUuid, engine.androidWishlistToSyncItem(wishPlaytimeItem));
+  const wishCreateSync = await engine.performDeltaSync(serverUrl, syncToken, client1.games, client1.wishlist);
+  assert.strictEqual(wishCreateSync.success, true);
+
+  // User manually edits avgPlaytime to 24.5 hours in Wishlist
+  const updatedWishPlaytimeItem = Object.assign({}, wishPlaytimeItem, {
+    avgPlaytime: 24.5,
+    updated_at: new Date().toISOString()
+  });
+  client1.wishlist = client1.wishlist.map(w => w.uuid === wishPlaytimeUuid ? updatedWishPlaytimeItem : w);
+  engine.enqueueAction('update', wishPlaytimeUuid, engine.androidWishlistToSyncItem(updatedWishPlaytimeItem));
+
+  const wishUpdateSync = await engine.performDeltaSync(serverUrl, syncToken, client1.games, client1.wishlist);
+  assert.strictEqual(wishUpdateSync.success, true);
+
+  const serverWishGame = (await (await fetch(`${serverUrl}/api/games`)).json()).games.find(g => g.uuid === wishPlaytimeUuid);
+  assert.strictEqual(serverWishGame.playtime_main, 24.5, "Server playtime_main must reflect Wishlist avgPlaytime (24.5)");
+  console.log("✔ Wishlist avgPlaytime update synced to Web playtime_main successfully!\n");
+
+  // -------------------------------------------------------------
+  // Test 16: Yandex Restore state reset: clears queue and prevents sending pre-restore actions
+  // -------------------------------------------------------------
+  console.log("▶ [Test 16] Yandex Restore: queue invalidation and safe post-restore sync...");
+  const preRestoreUuid = engine.generateUuid();
+  engine.enqueueAction('update', preRestoreUuid, { title: "Stale pre-restore modification" });
+  assert.ok(engine.getSyncQueue().length > 0, "Queue must hold action before restore");
+
+  // Simulate restore completion: resetSyncState()
+  engine.resetSyncState();
+  assert.strictEqual(engine.getSyncQueue().length, 0, "Queue must be empty after resetSyncState");
+  assert.strictEqual(client1.localStorage.getItem(engine.KEYS.LAST_SYNC), null, "last_sync must be null after resetSyncState");
+
+  // Verify subsequent sync performs clean initial sync without transmitting stale pre-restore action
+  const postRestoreSync = await engine.performDeltaSync(serverUrl, syncToken, client1.games, client1.wishlist);
+  assert.strictEqual(postRestoreSync.success, true);
+  const serverPreRestore = (await (await fetch(`${serverUrl}/api/games`)).json()).games.find(g => g.uuid === preRestoreUuid);
+  assert.strictEqual(serverPreRestore, undefined, "Pre-restore stale modification must NOT be sent to server");
+  console.log("✔ Yandex Restore queue invalidation and safe post-restore sync passed!\n");
+
   console.log("=================================================================");
-  console.log(" 🎉 ALL 13 REAL INTEGRATION TEST SCENARIOS PASSED SUCCESSFULLY!");
+  console.log(" 🎉 ALL 16 REAL INTEGRATION TEST SCENARIOS PASSED SUCCESSFULLY!");
   console.log("=================================================================");
 }
 

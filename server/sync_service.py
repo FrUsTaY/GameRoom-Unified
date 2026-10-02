@@ -189,12 +189,21 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                 norm_plat = normalize_platform(item.platform)
                 norm_status = normalize_status(item.status)
 
-                # Rating preservation
-                final_grade = item.rating_grade or existing.get("rating_grade") or ""
-                final_score = item.user_score if item.user_score is not None and item.user_score > 0 else existing.get("user_score") or 0
-                if not final_grade and final_score > 0:
-                    generated_grade, _ = parse_rating_to_grade(f"{final_score}/10")
-                    final_grade = generated_grade
+                # Rating preservation & update
+                if item.user_score is not None and item.user_score > 0:
+                    final_score = item.user_score
+                    if item.rating_grade:
+                        final_grade = item.rating_grade
+                    else:
+                        final_grade, _ = parse_rating_to_grade(f"{final_score}/10")
+                elif item.user_score == 0 and item.rating_grade == "":
+                    final_score = 0
+                    final_grade = ""
+                else:
+                    final_score = existing.get("user_score") or 0
+                    final_grade = item.rating_grade or existing.get("rating_grade") or ""
+                    if not final_grade and final_score > 0:
+                        final_grade, _ = parse_rating_to_grade(f"{final_score}/10")
 
                 # Notes and review consistency
                 raw_notes = item.notes if item.notes is not None else existing.get("notes", "")
@@ -418,10 +427,14 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
 
         # Prepare lookup indexes
         rawg_index = {}
+        uuid_index = {}
         for sg in server_games:
             rid = sg.get("rawg_id")
             if rid and int(rid) > 0:
                 rawg_index[int(rid)] = sg
+            u = sg.get("uuid")
+            if u:
+                uuid_index[str(u).strip()] = sg
 
         # Combine Android games and wishlist
         incoming_items = []
@@ -443,8 +456,13 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
 
             matched_server_game = None
 
+            # Level 0: Match by UUID (highest precision)
+            incoming_uuid = str(item.get("uuid") or "").strip()
+            if incoming_uuid and incoming_uuid in uuid_index:
+                matched_server_game = uuid_index[incoming_uuid]
+
             # Level 1: Match by rawg_id
-            if incoming_rawg_id and incoming_rawg_id in rawg_index:
+            if not matched_server_game and incoming_rawg_id and incoming_rawg_id in rawg_index:
                 matched_server_game = rawg_index[incoming_rawg_id]
 
             # Level 2: Match by normalized title + platform + year (+-1)

@@ -362,5 +362,121 @@ class TestSyncEdgeCases(unittest.TestCase):
         self.assertIn(game_uuid, updated_in_sync, "Delta sync must return the game after playtime update")
         self.assertEqual(updated_in_sync[game_uuid]["user_playtime_minutes"], 105)
 
+    def test_rating_change_10_to_3_sync(self):
+        """Item 1: Verify rating change from 10/10 to 3/10 updates rating_grade to musor on Web"""
+        game_uuid = str(uuid.uuid4())
+        initial_game = db.create_game({
+            "uuid": game_uuid,
+            "title": "Rating Conversion Test Game",
+            "status": "completed",
+            "platform": "PC",
+            "user_score": 10,
+            "rating_grade": "izumitelno"
+        })
+        self.assertEqual(initial_game["rating_grade"], "izumitelno")
+        self.assertEqual(initial_game["user_score"], 10)
+
+        # Android sends delta update with score 3 and rating_grade musor
+        now_str = datetime.now(timezone.utc).isoformat()
+        sync_payload = {
+            "client_id": "test-android-rating-client",
+            "client_version": "1.0",
+            "client_time_now": now_str,
+            "last_sync_timestamp": now_str,
+            "changes": {
+                "created": [],
+                "updated": [{
+                    "uuid": game_uuid,
+                    "title": "Rating Conversion Test Game",
+                    "status": "completed",
+                    "platform": "PC",
+                    "user_score": 3,
+                    "rating_grade": "musor",
+                    "updated_at": now_str
+                }],
+                "deleted": []
+            }
+        }
+        res = self.client.post("/api/sync", json=sync_payload, headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+
+        # Check server DB and Web API
+        updated_game = db.get_game_by_uuid(game_uuid)
+        self.assertEqual(updated_game["user_score"], 3)
+        self.assertEqual(updated_game["rating_grade"], "musor")
+
+        # Also test if Android sends only user_score 3 without rating_grade, server parses it to musor
+        game_uuid2 = str(uuid.uuid4())
+        db.create_game({
+            "uuid": game_uuid2,
+            "title": "Rating Conversion Test Game 2",
+            "status": "completed",
+            "platform": "PC",
+            "user_score": 10,
+            "rating_grade": "izumitelno"
+        })
+        sync_payload2 = {
+            "client_id": "test-android-rating-client",
+            "client_version": "1.0",
+            "client_time_now": now_str,
+            "last_sync_timestamp": now_str,
+            "changes": {
+                "created": [],
+                "updated": [{
+                    "uuid": game_uuid2,
+                    "title": "Rating Conversion Test Game 2",
+                    "status": "completed",
+                    "platform": "PC",
+                    "user_score": 3,
+                    "rating_grade": "",
+                    "updated_at": now_str
+                }],
+                "deleted": []
+            }
+        }
+        res2 = self.client.post("/api/sync", json=sync_payload2, headers=self.headers)
+        self.assertEqual(res2.status_code, 200)
+
+        updated_game2 = db.get_game_by_uuid(game_uuid2)
+        self.assertEqual(updated_game2["user_score"], 3)
+        self.assertEqual(updated_game2["rating_grade"], "musor")
+
+    def test_wishlist_avg_playtime_sync(self):
+        """Item 2: Verify Wishlist avgPlaytime update propagates to server playtime_main"""
+        wish_uuid = str(uuid.uuid4())
+        initial_wish = db.create_game({
+            "uuid": wish_uuid,
+            "title": "Wishlist Playtime Game",
+            "status": "backlog",
+            "platform": "PC",
+            "playtime_main": 0.0
+        })
+        self.assertEqual(initial_wish["playtime_main"], 0.0)
+
+        now_str = datetime.now(timezone.utc).isoformat()
+        sync_payload = {
+            "client_id": "test-android-wishlist-client",
+            "client_version": "1.0",
+            "client_time_now": now_str,
+            "last_sync_timestamp": now_str,
+            "changes": {
+                "created": [],
+                "updated": [{
+                    "uuid": wish_uuid,
+                    "title": "Wishlist Playtime Game",
+                    "status": "backlog",
+                    "platform": "PC",
+                    "playtime_main": 18.5,
+                    "updated_at": now_str
+                }],
+                "deleted": []
+            }
+        }
+        res = self.client.post("/api/sync", json=sync_payload, headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+
+        updated_wish = db.get_game_by_uuid(wish_uuid)
+        self.assertEqual(updated_wish["playtime_main"], 18.5)
+
 if __name__ == "__main__":
     unittest.main()
