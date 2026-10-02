@@ -231,15 +231,6 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                     if not final_grade and final_score > 0:
                         final_grade, _ = parse_rating_to_grade(f"{final_score}/10")
 
-                # Notes and review consistency
-                raw_notes = item.notes if item.notes is not None else existing.get("notes", "")
-                raw_review = item.user_review if item.user_review is not None else existing.get("user_review", "")
-                if norm_status == "completed":
-                    if raw_notes and not raw_review:
-                        raw_review = raw_notes
-                    elif raw_review and not raw_notes:
-                        raw_notes = raw_review
-
                 # Partial patch update for Category A fields
                 patch_data = {
                     "title": item.title or existing.get("title"),
@@ -248,8 +239,8 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                     "user_playtime_minutes": item.user_playtime_minutes if item.user_playtime_minutes is not None else existing.get("user_playtime_minutes", 0),
                     "rating_grade": final_grade,
                     "user_score": final_score,
-                    "notes": raw_notes,
-                    "user_review": raw_review,
+                    "notes": item.notes if item.notes is not None else existing.get("notes", ""),
+                    "user_review": item.user_review if item.user_review is not None else existing.get("user_review", ""),
                     "completed_at": item.completed_at if item.completed_at is not None else existing.get("completed_at", ""),
                     "is_favorite": item.is_favorite if item.is_favorite is not None else existing.get("is_favorite", 0),
                     "priority": item.priority or existing.get("priority", "medium"),
@@ -310,14 +301,6 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                 elif final_grade:
                     final_score = db.grade_to_score(final_grade)
 
-                new_notes = item.notes or ""
-                new_review = item.user_review or ""
-                if norm_status == "completed":
-                    if new_notes and not new_review:
-                        new_review = new_notes
-                    elif new_review and not new_notes:
-                        new_notes = new_review
-
                 new_game_dict = {
                     "uuid": item_uuid,
                     "title": item.title,
@@ -340,8 +323,8 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                     "user_playtime_minutes": item.user_playtime_minutes or 0,
                     "rating_grade": final_grade,
                     "user_score": final_score,
-                    "user_review": new_review,
-                    "notes": new_notes,
+                    "user_review": item.user_review or "",
+                    "notes": item.notes or "",
                     "is_favorite": item.is_favorite or 0,
                     "priority": item.priority or "medium",
                     "created_at": item.created_at or effective_updated_at,
@@ -543,7 +526,7 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
                     "updated_by": client_id
                 }
                 if not matched_server_game.get("notes") and item.get("note"):
-                    patch["notes"] = item.get("note")
+                    patch["user_review"] = item.get("note")
                 if not matched_server_game.get("rating_grade") and rating_grade:
                     patch["rating_grade"] = rating_grade
                 if (not matched_server_game.get("user_score") or matched_server_game.get("user_score") == 0) and user_score > 0:
@@ -577,7 +560,7 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
                     "rating_grade": rating_grade,
                     "user_score": user_score,
                     "user_review": item.get("note", "") if status == "completed" else "",
-                    "notes": item.get("note", ""),
+                    "notes": "",
                     "is_favorite": 1 if rating_grade == "izumitelno" or user_score >= 9 else 0,
                     "priority": "medium",
                     "created_at": server_time_str,
