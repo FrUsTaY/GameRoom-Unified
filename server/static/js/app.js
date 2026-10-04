@@ -583,8 +583,8 @@ const app = {
 
     container.innerHTML = playingGames.map(game => {
       const playedHours = (game.user_playtime_minutes / 60).toFixed(1);
-      const estHours = game.playtime_main || 10.0;
-      const progressPercent = Math.min(100, Math.round((game.user_playtime_minutes / (estHours * 60)) * 100));
+      const estHours = game.playtime_main || 0;
+      const progressPercent = estHours > 0 ? Math.min(100, Math.round((game.user_playtime_minutes / (estHours * 60)) * 100)) : 0;
       const bgImg = game.cover_url || game.background_url || '';
 
       return `
@@ -804,7 +804,7 @@ const app = {
               ${context === 'completed' ? 'Итог:' : (g.user_playtime_minutes > 0 ? 'Наиграно:' : 'Сюжет:')}
             </span>
             <span class="card-playtime-val">
-              ${context === 'completed' ? `${playedH} ч` : (g.user_playtime_minutes > 0 ? `${playedH} / ~${estH}` : `~${estH}`)}
+              ${context === 'completed' ? `${playedH} ч` : (g.user_playtime_minutes > 0 ? `${playedH} / ${g.playtime_main ? '~' + estH : estH}` : (g.playtime_main ? `~${estH}` : estH))}
             </span>
           </div>
 
@@ -986,7 +986,7 @@ const app = {
               <div class="card-meta">${this.escapeHtml(item.genres || 'Экшен')} • ${item.release_date ? item.release_date.split('-')[0] : 'TBA'}</div>
               <div class="card-playtime-row">
                 <span class="card-playtime-label">Время сюжета:</span>
-                <span class="card-playtime-val">~${item.playtime_main} ч</span>
+                <span class="card-playtime-val">${item.playtime_main ? `~${item.playtime_main} ч` : 'Не указано'}</span>
               </div>
               <div class="card-footer-layout">
                 <div class="card-primary-actions">
@@ -2510,10 +2510,23 @@ const app = {
       const devInput = document.getElementById('form-developer');
 
       if (coverInput && item.cover_url) coverInput.value = item.cover_url;
-      if (playtimeInput && item.playtime_main) playtimeInput.value = item.playtime_main;
       if (releaseInput && item.release_date) releaseInput.value = item.release_date;
       if (devInput && item.developer) devInput.value = item.developer;
       if (item.genres) this.setModalGenres(item.genres);
+
+      // Fetch playtime from HLTB
+      try {
+        const hltbRes = await fetch(`/api/hltb/time?title=${encodeURIComponent(item.title)}`);
+        const hltbData = await hltbRes.json();
+        if (hltbData.success && hltbData.playtime && playtimeInput) {
+            playtimeInput.value = hltbData.playtime;
+        } else if (playtimeInput) {
+            playtimeInput.value = ''; // Ensure it's left empty if not found
+        }
+      } catch (hltbErr) {
+        console.warn('HLTB fetch error:', hltbErr);
+        if (playtimeInput) playtimeInput.value = '';
+      }
 
       this.showToast(`Данные и обложка для «${item.title}» успешно загружены!`, 'success');
     } catch (e) {
