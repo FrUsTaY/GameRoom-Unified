@@ -304,9 +304,10 @@ def get_sample_rawg_search(query: str) -> List[Dict[str, Any]]:
             "genres": "Экшен, Приключения, Сюжетная",
             "platforms_list": ["PC", "PlayStation 5"],
             "platform": "PC",
-            "playtime_main": 24.0,
-            "playtime_extra": 31.0,
-            "playtime_completionist": 42.0
+            "playtime_main": 0.0,
+            "playtime_extra": 0.0,
+            "playtime_completionist": 0.0
+
         },
         {
             "rawg_id": 401664,
@@ -320,9 +321,10 @@ def get_sample_rawg_search(query: str) -> List[Dict[str, Any]]:
             "genres": "Экшен, Приключения, Психологический хоррор",
             "platforms_list": ["PC", "Xbox Series S/X"],
             "platform": "PC",
-            "playtime_main": 7.5,
-            "playtime_extra": 9.0,
-            "playtime_completionist": 11.0
+            "playtime_main": 0.0,
+            "playtime_extra": 0.0,
+            "playtime_completionist": 0.0
+
         },
         {
             "rawg_id": 892556,
@@ -336,9 +338,10 @@ def get_sample_rawg_search(query: str) -> List[Dict[str, Any]]:
             "genres": "Sci-Fi, Приключения, Открытый мир",
             "platforms_list": ["PC", "PlayStation 5"],
             "platform": "PC",
-            "playtime_main": 35.0,
-            "playtime_extra": 55.0,
-            "playtime_completionist": 85.0
+            "playtime_main": 0.0,
+            "playtime_extra": 0.0,
+            "playtime_completionist": 0.0
+
         },
         {
             "rawg_id": 612803,
@@ -352,9 +355,10 @@ def get_sample_rawg_search(query: str) -> List[Dict[str, Any]]:
             "genres": "Экшен, Приключения, Открытый мир",
             "platforms_list": ["PC", "PlayStation 5"],
             "platform": "PC",
-            "playtime_main": 25.0,
-            "playtime_extra": 44.0,
-            "playtime_completionist": 62.0
+            "playtime_main": 0.0,
+            "playtime_extra": 0.0,
+            "playtime_completionist": 0.0
+
         },
         {
             "rawg_id": 870420,
@@ -368,9 +372,10 @@ def get_sample_rawg_search(query: str) -> List[Dict[str, Any]]:
             "genres": "Хоррор, Выживание, Детектив",
             "platforms_list": ["PC", "PlayStation 5"],
             "platform": "PC",
-            "playtime_main": 15.0,
-            "playtime_extra": 18.0,
-            "playtime_completionist": 22.0
+            "playtime_main": 0.0,
+            "playtime_extra": 0.0,
+            "playtime_completionist": 0.0
+
         }
     ]
     if query:
