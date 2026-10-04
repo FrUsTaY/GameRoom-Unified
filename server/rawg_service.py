@@ -7,6 +7,7 @@ import requests
 import logging
 from typing import Dict, Any, List, Optional
 from database import get_setting, create_game
+from hltb_service import get_hltb_playtime
 
 logger = logging.getLogger("rawg_service")
 RAWG_BASE_URL = "https://api.rawg.io/api"
@@ -166,12 +167,13 @@ def quick_add_game(rawg_id: Optional[int], target_status: str = "backlog", game_
     if not details:
         return {"success": False, "error": "Не удалось получить метаданные игры для добавления."}
 
-    playtime_main = float(details.get("playtime_main") or details.get("playtime") or 10.0)
-    if playtime_main <= 0:
-        playtime_main = 10.0
+    title_for_hltb = details.get("title") or details.get("name") or "Новая игра"
+    hltb_time = get_hltb_playtime(title_for_hltb)
+    playtime_main = hltb_time
 
-    playtime_extra = float(details.get("playtime_extra") or round(playtime_main * 1.35, 1))
-    playtime_completionist = float(details.get("playtime_completionist") or round(playtime_main * 1.8, 1))
+    # We do not compute playtime_extra or playtime_completionist here anymore
+    playtime_extra = 0.0
+    playtime_completionist = 0.0
 
     priority = "high" if target_status == "playing" else "medium"
 
@@ -238,10 +240,11 @@ def format_rawg_game_summary(item: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(p, dict) and isinstance(p.get("platform"), dict) and p.get("platform", {}).get("name")
     ]
     
-    raw_playtime = item.get("playtime") or 0
-    playtime_main = float(raw_playtime) if raw_playtime > 0 else 10.0
-    playtime_extra = round(playtime_main * 1.35, 1)
-    playtime_completionist = round(playtime_main * 1.8, 1)
+    # We no longer calculate playtime from RAWG since we will fetch it from HLTB
+    # Setting it to 0 / None so frontend knows it's empty
+    playtime_main = 0.0
+    playtime_extra = 0.0
+    playtime_completionist = 0.0
 
     primary_platform = "PC"
     if platforms:
@@ -445,11 +448,10 @@ def enrich_single_game(game_id: int) -> Dict[str, Any]:
 
     # Only update playtime if previously unset or default
     if not game.get("playtime_main") or game.get("playtime_main") <= 0 or game.get("playtime_main") == 10.0:
-        p_main = float(details.get("playtime_main") or details.get("playtime") or 10.0)
-        if p_main > 0:
-            updates["playtime_main"] = p_main
-            updates["playtime_extra"] = round(p_main * 1.35, 1)
-            updates["playtime_completionist"] = round(p_main * 1.8, 1)
+        game_title = details.get("title") or best_item.get("title") or game.get("title", "")
+        hltb_time = get_hltb_playtime(game_title)
+        if hltb_time is not None and hltb_time > 0:
+            updates["playtime_main"] = hltb_time
 
     updated_game = update_game(game_id, updates)
     return {

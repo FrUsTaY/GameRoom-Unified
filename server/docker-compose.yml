@@ -1,6 +1,13 @@
 version: '3.8'
 
 services:
+  hltb-service:
+    build:
+      context: ./hltb-service
+      dockerfile: Dockerfile
+    container_name: hltb-service
+    restart: unless-stopped
+
   gameroom-web:
     build:
       context: .
@@ -17,6 +24,7 @@ services:
       - GAME_ROOM_WEB_USERNAME=${GAME_ROOM_WEB_USERNAME:-}
       - GAME_ROOM_WEB_PASSWORD_HASH=${GAME_ROOM_WEB_PASSWORD_HASH:-}
       - GAMEROOM_SYNC_TOKEN=${GAMEROOM_SYNC_TOKEN:-}
+      - HLTB_SERVICE_URL=http://hltb-service:3000
     volumes:
       # Persistent storage on host for SQLite database and backups
       - ./data:/app/data
