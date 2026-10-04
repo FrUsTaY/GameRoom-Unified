@@ -543,11 +543,11 @@ def serve_index(request: Request):
     if session_token and is_valid_web_session(session_token):
         index_file = os.path.join(static_dir, "index.html")
         if os.path.exists(index_file):
-            return FileResponse(index_file, media_type="text/html")
+            return FileResponse(index_file, media_type="text/html", headers={"Cache-Control": "no-store"})
 
     login_file = os.path.join(static_dir, "login.html")
     if os.path.exists(login_file):
-        return FileResponse(login_file, media_type="text/html")
+        return FileResponse(login_file, media_type="text/html", headers={"Cache-Control": "no-store"})
     return HTMLResponse("<h1>GAME-ROOM's Backlog Tracker</h1><p>login.html not found</p>", status_code=404)
 
 @app.get("/login")
@@ -561,7 +561,7 @@ def serve_login(request: Request):
 
     login_file = os.path.join(static_dir, "login.html")
     if os.path.exists(login_file):
-        return FileResponse(login_file, media_type="text/html")
+        return FileResponse(login_file, media_type="text/html", headers={"Cache-Control": "no-store"})
     return HTMLResponse("<h1>GAME-ROOM's Backlog Tracker</h1><p>login.html not found</p>", status_code=404)
 
 @app.get("/manifest.json")
