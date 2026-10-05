@@ -202,6 +202,7 @@ def quick_add_game(rawg_id: Optional[int], target_status: str = "backlog", game_
         "rawg_rating": float(details.get("rawg_rating") or details.get("rating") or 0.0),
         "metacritic": int(details.get("metacritic") or 0),
         "playtime_main": playtime_main,
+        "playtime_source": "hltb" if playtime_main and playtime_main > 0 else "legacy",
         "playtime_extra": playtime_extra,
         "playtime_completionist": playtime_completionist,
         "user_playtime_minutes": 0,
@@ -457,6 +458,7 @@ def enrich_single_game(game_id: int) -> Dict[str, Any]:
         hltb_time = get_hltb_playtime(game_title)
         if hltb_time is not None and hltb_time > 0:
             updates["playtime_main"] = hltb_time
+            updates["playtime_source"] = "hltb"
 
     updated_game = update_game(game_id, updates)
     return {

@@ -135,6 +135,9 @@
             <button type="button" class="sv-btn sv-btn-cyan sv-btn-sm" onclick="app.startBulkRawgEnrichment('backlog')" title="Автоматически найти обложки и данные в RAWG">
               🖼️ Подтянуть обложки RAWG
             </button>
+            <button type="button" class="sv-btn sv-btn-cyan sv-btn-sm" onclick="app.startBulkHltbUpdate()" title="Массово обновить время прохождения через HLTB (без изменения ручных значений)">
+              🎯 Массово обновить время HLTB
+            </button>
             <button type="button" class="sv-btn sv-btn-yellow sv-btn-glow" id="btn-open-wheel" onclick="app.openWheelModal()">
               <span style="font-size:1.2rem; margin-right:4px;">⚡</span> КРУТИТЬ КОЛЕСО
             </button>
@@ -986,6 +989,46 @@
 <!-- FLOATING TOAST CONTAINER -->
 <div id="toast-container" class="toast-container"></div>
 
+
+<!-- HLTB BULK UPDATE MODAL -->
+<div class="sv-modal-overlay" id="hltb-bulk-modal" style="z-index: 2100;">
+  <div class="sv-modal" style="max-width: 520px;">
+    <div class="modal-header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:1.5rem;">🎯</span>
+        <h3 class="modal-title">МАССОВОЕ ОБНОВЛЕНИЕ HLTB</h3>
+      </div>
+      <button type="button" class="modal-close-btn" onclick="app.closeModal('hltb-bulk-modal')">&times;</button>
+    </div>
+    <div class="modal-body" style="padding: 20px 24px;">
+      <p style="color:var(--sv-text-secondary); font-size:0.9rem; margin-bottom:16px;" id="hltb-status-text">
+        Получение времени прохождения для игр через HowLongToBeat...
+      </p>
+
+      <div class="progress-bar-wrap" style="height:16px; margin-bottom:14px; background:var(--sv-bg-deep); border:1px solid var(--sv-border-bright);">
+        <div class="progress-bar-fill" id="hltb-progress-bar" style="width: 0%; background:linear-gradient(90deg, var(--sv-yellow), var(--sv-orange));"></div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:800; margin-bottom:8px;">
+        <span style="color:var(--sv-yellow);" id="hltb-counts-label">Обработано: 0 / 0</span>
+        <span style="color:var(--sv-orange);" id="hltb-percent-label">0%</span>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:4px; font-size:0.85rem; margin-bottom:16px;">
+        <div>Обновлено (HLTB): <span id="hltb-updated-label" style="color:var(--sv-green);">0</span></div>
+        <div>Не найдено: <span id="hltb-notfound-label" style="color:var(--sv-red);">0</span></div>
+        <div>Пропущено ручных: <span id="hltb-skipped-label" style="color:var(--sv-cyan);">0</span></div>
+      </div>
+
+      <div id="hltb-log-box" style="background:rgba(0,0,0,0.5); border:1px solid var(--sv-border); clip-path:var(--clip-badge); padding:10px 14px; max-height:100px; overflow-y:auto; font-size:0.8rem; color:var(--sv-text-muted); line-height:1.4;">
+        <div>Ожидание запуска...</div>
+      </div>
+    </div>
+    <div class="modal-footer" style="padding:14px 24px; display:flex; justify-content:flex-end;">
+      <button type="button" class="sv-btn sv-btn-yellow" id="hltb-done-btn" style="display:none;" onclick="app.closeModal('hltb-bulk-modal')">Готово!</button>
+    </div>
+  </div>
+</div>
 
 <!-- 7. BULK RAWG METADATA & COVER ENRICHER MODAL -->
 <div class="sv-modal-overlay" id="enrich-modal" style="z-index: 2100;">

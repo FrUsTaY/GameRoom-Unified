@@ -1204,6 +1204,11 @@ const app = {
     this.selectedModalGrade = '';
     document.getElementById('form-rating-grade').value = '';
 
+    // Reset playtime tracking state
+    this.originalPlaytimeMain = null;
+    this.playtimeSourceOverride = null;
+    this.lastAutofilledTime = null;
+
     if (gameId) {
       if (delBtn) delBtn.style.display = 'inline-flex';
       const game = this.games.find(g => g.id === gameId);
@@ -1219,6 +1224,7 @@ const app = {
         document.getElementById('form-developer').value = game.developer || '';
         document.getElementById('form-cover-url').value = game.cover_url || '';
         document.getElementById('form-playtime-main').value = game.playtime_main || '';
+        this.originalPlaytimeMain = game.playtime_main || 0;
         document.getElementById('form-user-playtime').value = game.user_playtime_minutes || 0;
         document.getElementById('form-user-review').value = game.user_review || '';
         document.getElementById('form-notes').value = game.notes || '';
@@ -1330,6 +1336,9 @@ const app = {
   async saveGameForm() {
     const id = document.getElementById('form-game-id').value;
     const gradeVal = document.getElementById('form-rating-grade').value || '';
+
+    let playtimeMainVal = parseFloat(document.getElementById('form-playtime-main').value) || 0.0;
+
     const payload = {
       title: document.getElementById('form-title').value,
       status: document.getElementById('form-status').value,
@@ -1340,13 +1349,41 @@ const app = {
       genres: document.getElementById('form-genres').value || 'Экшен',
       developer: document.getElementById('form-developer').value,
       cover_url: document.getElementById('form-cover-url').value,
-      playtime_main: parseFloat(document.getElementById('form-playtime-main').value) || 0.0,
+      playtime_main: playtimeMainVal,
       user_playtime_minutes: parseInt(document.getElementById('form-user-playtime').value, 10) || 0,
       rating_grade: gradeVal,
       user_score: this.gradeToScore(gradeVal),
       user_review: document.getElementById('form-user-review').value || '',
       notes: document.getElementById('form-notes').value
     };
+
+    if (id) {
+        if (this.playtimeSourceOverride) {
+            // Priority 1: HLTB autofill set it, but user might have manually overridden it after
+            const isDifferentFromAutofill = Math.abs(playtimeMainVal - (this.lastAutofilledTime || 0)) > 0.01;
+            if (this.playtimeSourceOverride === 'hltb' && isDifferentFromAutofill) {
+                payload.playtime_source = 'manual';
+            } else {
+                payload.playtime_source = this.playtimeSourceOverride;
+            }
+        } else if (this.originalPlaytimeMain !== null && Math.abs(playtimeMainVal - this.originalPlaytimeMain) > 0.01) {
+            // Priority 2: User manually changed the value
+            payload.playtime_source = 'manual';
+        }
+    } else {
+        // new game
+        if (this.playtimeSourceOverride) {
+            const isDifferentFromAutofill = Math.abs(playtimeMainVal - (this.lastAutofilledTime || 0)) > 0.01;
+            if (this.playtimeSourceOverride === 'hltb' && isDifferentFromAutofill) {
+                payload.playtime_source = 'manual';
+            } else {
+                payload.playtime_source = this.playtimeSourceOverride;
+            }
+        } else if (playtimeMainVal > 0) {
+            // user entered time manually on create
+            payload.playtime_source = 'manual';
+        }
+    }
 
     try {
       if (id) {
@@ -2520,6 +2557,8 @@ const app = {
         const hltbData = await hltbRes.json();
         if (hltbData.success && hltbData.playtime && playtimeInput) {
             playtimeInput.value = hltbData.playtime;
+            this.playtimeSourceOverride = 'hltb';
+            this.lastAutofilledTime = hltbData.playtime;
         } else if (playtimeInput) {
             playtimeInput.value = ''; // Ensure it's left empty if not found
         }
@@ -2531,6 +2570,117 @@ const app = {
       this.showToast(`Данные и обложка для «${item.title}» успешно загружены!`, 'success');
     } catch (e) {
       this.showAlert(e.message, 'ОШИБКА RAWG', 'error');
+    }
+  },
+
+  async startBulkHltbUpdate() {
+    const isFirstRun = !localStorage.getItem('hltb_bulk_ran_once');
+
+    let msg = `Массово обновить время прохождения у всех игр через HowLongToBeat?`;
+    if (isFirstRun) {
+        msg = `<strong>Внимание: первый запуск!</strong><br><br>У существующих игр источник времени пока неизвестен. Первый полный проход может заменить старые значения на данные HLTB. После ручного редактирования значения будут защищены от последующих HLTB-обновлений.<br><br>Запустить массовое обновление?`;
+    }
+
+    const confirmed = await this.showConfirm({
+      title: '🎯 МАССОВОЕ ОБНОВЛЕНИЕ HLTB',
+      message: msg,
+      confirmText: '🚀 Запустить',
+      type: 'info'
+    });
+
+    if (!confirmed) return;
+
+    this.isHltbBulkRunning = true;
+    const modal = document.getElementById('hltb-bulk-modal');
+    const logBox = document.getElementById('hltb-log-box');
+    const progressBar = document.getElementById('hltb-progress-bar');
+    const countsLabel = document.getElementById('hltb-counts-label');
+    const percentLabel = document.getElementById('hltb-percent-label');
+    const updatedLabel = document.getElementById('hltb-updated-label');
+    const notfoundLabel = document.getElementById('hltb-notfound-label');
+    const skippedLabel = document.getElementById('hltb-skipped-label');
+    const doneBtn = document.getElementById('hltb-done-btn');
+    const statusText = document.getElementById('hltb-status-text');
+
+    if (modal) modal.classList.add('open');
+    if (logBox) logBox.innerHTML = '<div>🚀 Запуск массового обновления HLTB...</div>';
+    if (doneBtn) doneBtn.style.display = 'none';
+    if (statusText) statusText.textContent = 'Получение времени прохождения для игр через HowLongToBeat...';
+
+    let currentOffset = 0;
+    const limit = 20;
+    const forceLegacy = isFirstRun;
+
+    let totalProcessed = 0;
+    let totalUpdated = 0;
+    let totalNotFound = 0;
+    let totalSkippedManual = 0;
+    let totalGames = 0;
+
+    try {
+        let hasMore = true;
+
+        while (hasMore && this.isHltbBulkRunning) {
+            const res = await fetch('/api/hltb/bulk-update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    force_legacy: forceLegacy,
+                    offset: currentOffset,
+                    limit: limit
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                totalProcessed += data.processed;
+                totalUpdated += data.updated;
+                totalNotFound += data.not_found;
+                totalSkippedManual += data.skipped_manual;
+                totalGames = data.total;
+
+                hasMore = data.has_more;
+                currentOffset += limit;
+
+                const curProcessedDisplay = Math.min(currentOffset, totalGames);
+                const pct = totalGames > 0 ? Math.round((curProcessedDisplay / totalGames) * 100) : 100;
+
+                if (countsLabel) countsLabel.textContent = `Обработано: ${curProcessedDisplay} / ${totalGames}`;
+                if (percentLabel) percentLabel.textContent = `${pct}%`;
+                if (progressBar) progressBar.style.width = `${pct}%`;
+                if (updatedLabel) updatedLabel.textContent = totalUpdated;
+                if (notfoundLabel) notfoundLabel.textContent = totalNotFound;
+                if (skippedLabel) skippedLabel.textContent = totalSkippedManual;
+
+                if (logBox) {
+                    logBox.innerHTML += `<div>Обработано ${curProcessedDisplay} / ${totalGames}...</div>`;
+                    logBox.scrollTop = logBox.scrollHeight;
+                }
+            } else {
+                hasMore = false;
+                this.isHltbBulkRunning = false;
+                this.showAlert(data.error || 'Ошибка массового обновления', 'ОШИБКА', 'error');
+                if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Ошибка: ${data.error}</div>`;
+                return;
+            }
+        }
+
+        localStorage.setItem('hltb_bulk_ran_once', 'true');
+        this.isHltbBulkRunning = false;
+
+        if (statusText) statusText.innerHTML = '<span style="color:var(--sv-green);">✅ Обновление HLTB завершено!</span>';
+        if (doneBtn) doneBtn.style.display = 'inline-flex';
+
+        if (logBox) {
+            logBox.innerHTML += `<div style="color:var(--sv-green);">🎉 Готово! Итого обработано: ${totalProcessed}. Обновлено HLTB: ${totalUpdated}.</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        await this.refreshAllData();
+    } catch (e) {
+        this.isHltbBulkRunning = false;
+        if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Сетевая ошибка: ${e.message}</div>`;
+        this.showAlert(e.message, 'ОШИБКА', 'error');
     }
   },
 
