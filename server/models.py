@@ -102,6 +102,8 @@ class ClearStatusRequest(BaseModel):
 
 class BulkHltbUpdateRequest(BaseModel):
     force_legacy: bool = False
+    offset: int = 0
+    limit: int = 20
 
 # --- Distributed Sync Models ---
 

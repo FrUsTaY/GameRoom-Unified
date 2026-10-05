@@ -1207,6 +1207,7 @@ const app = {
     // Reset playtime tracking state
     this.originalPlaytimeMain = null;
     this.playtimeSourceOverride = null;
+    this.lastAutofilledTime = null;
 
     if (gameId) {
       if (delBtn) delBtn.style.display = 'inline-flex';
@@ -2589,36 +2590,72 @@ const app = {
 
     if (!confirmed) return;
 
-    this.showToast('🚀 Запущено массовое обновление времени HLTB. Это может занять некоторое время...', 'info', 5000);
+    this.showToast('🚀 Запущено массовое обновление времени HLTB...', 'info', 0);
+
+    let currentOffset = 0;
+    const limit = 20;
+    const forceLegacy = isFirstRun;
+
+    let totalProcessed = 0;
+    let totalUpdated = 0;
+    let totalNotFound = 0;
+    let totalSkippedManual = 0;
+    let totalGames = 0;
 
     try {
-        const forceLegacy = isFirstRun;
-        const res = await fetch('/api/hltb/bulk-update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ force_legacy: forceLegacy })
-        });
-        const data = await res.json();
+        let hasMore = true;
 
-        if (data.success) {
-            localStorage.setItem('hltb_bulk_ran_once', 'true');
-
-            await this.showConfirm({
-                title: '✅ ОБНОВЛЕНИЕ ЗАВЕРШЕНО',
-                message: `
-                    <strong>Статистика:</strong><br>
-                    • Обработано игр: ${data.processed}<br>
-                    • Успешно обновлено HLTB: <span style="color:var(--sv-green);">${data.updated}</span><br>
-                    • Не найдено в HLTB: ${data.not_found}<br>
-                    • Пропущено ручных (защищено): <span style="color:var(--sv-yellow);">${data.skipped_manual}</span>
-                `,
-                confirmText: 'OK',
-                type: 'success'
+        while (hasMore) {
+            const res = await fetch('/api/hltb/bulk-update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    force_legacy: forceLegacy,
+                    offset: currentOffset,
+                    limit: limit
+                })
             });
-            await this.refreshAllData();
-        } else {
-            this.showAlert(data.error || 'Произошла ошибка при обновлении', 'ОШИБКА HLTB', 'error');
+            const data = await res.json();
+
+            if (data.success) {
+                totalProcessed += data.processed;
+                totalUpdated += data.updated;
+                totalNotFound += data.not_found;
+                totalSkippedManual += data.skipped_manual;
+                totalGames = data.total;
+
+                hasMore = data.has_more;
+                currentOffset += limit;
+
+                if (hasMore) {
+                    this.showToast(`🚀 Обработано ${Math.min(currentOffset, totalGames)} из ${totalGames}...`, 'info', 0);
+                }
+            } else {
+                hasMore = false;
+                this.showAlert(data.error || 'Ошибка массового обновления', 'ОШИБКА', 'error');
+                return;
+            }
         }
+
+        localStorage.setItem('hltb_bulk_ran_once', 'true');
+
+        this.showToast('✅ Обновление HLTB завершено!', 'success', 3000);
+
+        await this.showConfirm({
+            title: '✅ ОБНОВЛЕНИЕ ЗАВЕРШЕНО',
+            message: `
+                <strong>Статистика:</strong><br>
+                • Всего игр в базе: ${totalGames}<br>
+                • Обработано в этот раз: ${totalProcessed}<br>
+                • Успешно обновлено HLTB: <span style="color:var(--sv-green);">${totalUpdated}</span><br>
+                • Не найдено в HLTB: ${totalNotFound}<br>
+                • Пропущено ручных (защищено): <span style="color:var(--sv-yellow);">${totalSkippedManual}</span>
+            `,
+            confirmText: 'OK',
+            type: 'success'
+        });
+
+        await this.refreshAllData();
     } catch (e) {
         this.showAlert(e.message, 'ОШИБКА', 'error');
     }

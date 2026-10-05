@@ -259,12 +259,17 @@ def bulk_hltb_update(req: BulkHltbUpdateRequest):
     from hltb_service import get_hltb_playtime
     games = db.get_games()
 
+    total_games = len(games)
+
+    # Slice the games for this chunk
+    chunk = games[req.offset:req.offset + req.limit]
+
     processed = 0
     updated = 0
     not_found = 0
     skipped_manual = 0
 
-    for g in games:
+    for g in chunk:
         source = g.get("playtime_source", "legacy")
         # NEVER touch manual, regardless of force_legacy
         if source == "manual":
@@ -285,12 +290,16 @@ def bulk_hltb_update(req: BulkHltbUpdateRequest):
         else:
             not_found += 1
 
+    has_more = (req.offset + req.limit) < total_games
+
     return {
         "success": True,
         "processed": processed,
         "updated": updated,
         "not_found": not_found,
-        "skipped_manual": skipped_manual
+        "skipped_manual": skipped_manual,
+        "has_more": has_more,
+        "total": total_games
     }
 
 @app.get("/api/rawg/game/{game_id_or_slug}", dependencies=[Depends(verify_auth)])
