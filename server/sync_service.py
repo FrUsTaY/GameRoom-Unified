@@ -261,8 +261,10 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                     patch_data["developer"] = item.developer
                 if item.publisher:
                     patch_data["publisher"] = item.publisher
-                if item.playtime_main and item.playtime_main > 0:
-                    patch_data["playtime_main"] = item.playtime_main
+                if item.playtime_main is not None and item.playtime_main > 0:
+                    if item.playtime_main != existing.get("playtime_main"):
+                        patch_data["playtime_main"] = item.playtime_main
+                        patch_data["playtime_source"] = "manual"
 
                 db.update_game_by_uuid(item_uuid, patch_data)
                 ack.applied_updated.append(item_uuid)
@@ -554,6 +556,7 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
                     "rawg_rating": float(user_score) / 2.0 if user_score > 0 else 0.0,
                     "metacritic": user_score * 10 if user_score > 0 else 0,
                     "playtime_main": float(item.get("avgPlaytime") or 0.0),
+                    "playtime_source": "manual" if float(item.get("avgPlaytime") or 0.0) > 0 else "legacy",
                     "playtime_extra": round(float(item.get("avgPlaytime") or 0.0) * 1.35, 1),
                     "playtime_completionist": round(float(item.get("avgPlaytime") or 0.0) * 1.8, 1),
                     "user_playtime_minutes": user_minutes,

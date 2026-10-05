@@ -45,7 +45,7 @@ from models import (
     SettingsUpdate, ChatRequest, BackupRequest, RestoreRequest,
     QuickAddRawgRequest, MoveStatusRequest, ClearStatusRequest,
     SyncRequest, SyncResponse, InitialSyncRequest, InitialSyncResponse,
-    LoginRequest
+    LoginRequest, BulkHltbUpdateRequest
 )
 
 # Initialize database schema
@@ -253,6 +253,45 @@ def get_hltb_time(title: str = Query(..., description="Game title to search on H
     from hltb_service import get_hltb_playtime
     time_hours = get_hltb_playtime(title)
     return {"success": True, "playtime": time_hours}
+
+@app.post("/api/hltb/bulk-update", dependencies=[Depends(verify_auth)])
+def bulk_hltb_update(req: BulkHltbUpdateRequest):
+    from hltb_service import get_hltb_playtime
+    games = db.get_games()
+
+    processed = 0
+    updated = 0
+    not_found = 0
+    skipped_manual = 0
+
+    for g in games:
+        source = g.get("playtime_source", "legacy")
+        # NEVER touch manual, regardless of force_legacy
+        if source == "manual":
+            skipped_manual += 1
+            continue
+
+        processed += 1
+        title = g.get("title", "")
+        time_hours = get_hltb_playtime(title)
+
+        if time_hours is not None and time_hours > 0:
+            updates = {
+                "playtime_main": time_hours,
+                "playtime_source": "hltb"
+            }
+            db.update_game(g["id"], updates)
+            updated += 1
+        else:
+            not_found += 1
+
+    return {
+        "success": True,
+        "processed": processed,
+        "updated": updated,
+        "not_found": not_found,
+        "skipped_manual": skipped_manual
+    }
 
 @app.get("/api/rawg/game/{game_id_or_slug}", dependencies=[Depends(verify_auth)])
 def get_rawg_details(game_id_or_slug: str):

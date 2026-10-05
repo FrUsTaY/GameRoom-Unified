@@ -20,6 +20,7 @@ class GameCreate(BaseModel):
     rawg_rating: Optional[float] = 0.0
     metacritic: Optional[int] = 0
     playtime_main: Optional[float] = 0.0  # Estimated hours for main story
+    playtime_source: Optional[str] = None
     playtime_extra: Optional[float] = 0.0  # Estimated hours main + extras
     playtime_completionist: Optional[float] = 0.0  # Estimated hours 100%
     user_playtime_minutes: Optional[int] = 0  # Actual played time in minutes
@@ -48,6 +49,7 @@ class GameUpdate(BaseModel):
     rawg_rating: Optional[float] = None
     metacritic: Optional[int] = None
     playtime_main: Optional[float] = None
+    playtime_source: Optional[str] = None
     playtime_extra: Optional[float] = None
     playtime_completionist: Optional[float] = None
     user_playtime_minutes: Optional[int] = None
@@ -97,6 +99,9 @@ class MoveStatusRequest(BaseModel):
 
 class ClearStatusRequest(BaseModel):
     status: str
+
+class BulkHltbUpdateRequest(BaseModel):
+    force_legacy: bool = False
 
 # --- Distributed Sync Models ---
 

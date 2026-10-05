@@ -1204,6 +1204,10 @@ const app = {
     this.selectedModalGrade = '';
     document.getElementById('form-rating-grade').value = '';
 
+    // Reset playtime tracking state
+    this.originalPlaytimeMain = null;
+    this.playtimeSourceOverride = null;
+
     if (gameId) {
       if (delBtn) delBtn.style.display = 'inline-flex';
       const game = this.games.find(g => g.id === gameId);
@@ -1219,6 +1223,7 @@ const app = {
         document.getElementById('form-developer').value = game.developer || '';
         document.getElementById('form-cover-url').value = game.cover_url || '';
         document.getElementById('form-playtime-main').value = game.playtime_main || '';
+        this.originalPlaytimeMain = game.playtime_main || 0;
         document.getElementById('form-user-playtime').value = game.user_playtime_minutes || 0;
         document.getElementById('form-user-review').value = game.user_review || '';
         document.getElementById('form-notes').value = game.notes || '';
@@ -1330,6 +1335,9 @@ const app = {
   async saveGameForm() {
     const id = document.getElementById('form-game-id').value;
     const gradeVal = document.getElementById('form-rating-grade').value || '';
+
+    let playtimeMainVal = parseFloat(document.getElementById('form-playtime-main').value) || 0.0;
+
     const payload = {
       title: document.getElementById('form-title').value,
       status: document.getElementById('form-status').value,
@@ -1340,13 +1348,41 @@ const app = {
       genres: document.getElementById('form-genres').value || 'Экшен',
       developer: document.getElementById('form-developer').value,
       cover_url: document.getElementById('form-cover-url').value,
-      playtime_main: parseFloat(document.getElementById('form-playtime-main').value) || 0.0,
+      playtime_main: playtimeMainVal,
       user_playtime_minutes: parseInt(document.getElementById('form-user-playtime').value, 10) || 0,
       rating_grade: gradeVal,
       user_score: this.gradeToScore(gradeVal),
       user_review: document.getElementById('form-user-review').value || '',
       notes: document.getElementById('form-notes').value
     };
+
+    if (id) {
+        if (this.playtimeSourceOverride) {
+            // Priority 1: HLTB autofill set it, but user might have manually overridden it after
+            const isDifferentFromAutofill = Math.abs(playtimeMainVal - (this.lastAutofilledTime || 0)) > 0.01;
+            if (this.playtimeSourceOverride === 'hltb' && isDifferentFromAutofill) {
+                payload.playtime_source = 'manual';
+            } else {
+                payload.playtime_source = this.playtimeSourceOverride;
+            }
+        } else if (this.originalPlaytimeMain !== null && Math.abs(playtimeMainVal - this.originalPlaytimeMain) > 0.01) {
+            // Priority 2: User manually changed the value
+            payload.playtime_source = 'manual';
+        }
+    } else {
+        // new game
+        if (this.playtimeSourceOverride) {
+            const isDifferentFromAutofill = Math.abs(playtimeMainVal - (this.lastAutofilledTime || 0)) > 0.01;
+            if (this.playtimeSourceOverride === 'hltb' && isDifferentFromAutofill) {
+                payload.playtime_source = 'manual';
+            } else {
+                payload.playtime_source = this.playtimeSourceOverride;
+            }
+        } else if (playtimeMainVal > 0) {
+            // user entered time manually on create
+            payload.playtime_source = 'manual';
+        }
+    }
 
     try {
       if (id) {
@@ -2520,6 +2556,8 @@ const app = {
         const hltbData = await hltbRes.json();
         if (hltbData.success && hltbData.playtime && playtimeInput) {
             playtimeInput.value = hltbData.playtime;
+            this.playtimeSourceOverride = 'hltb';
+            this.lastAutofilledTime = hltbData.playtime;
         } else if (playtimeInput) {
             playtimeInput.value = ''; // Ensure it's left empty if not found
         }
@@ -2531,6 +2569,58 @@ const app = {
       this.showToast(`Данные и обложка для «${item.title}» успешно загружены!`, 'success');
     } catch (e) {
       this.showAlert(e.message, 'ОШИБКА RAWG', 'error');
+    }
+  },
+
+  async startBulkHltbUpdate() {
+    const isFirstRun = !localStorage.getItem('hltb_bulk_ran_once');
+
+    let msg = `Массово обновить время прохождения у всех игр через HowLongToBeat?`;
+    if (isFirstRun) {
+        msg = `<strong>Внимание: первый запуск!</strong><br><br>У существующих игр источник времени пока неизвестен. Первый полный проход может заменить старые значения на данные HLTB. После ручного редактирования значения будут защищены от последующих HLTB-обновлений.<br><br>Запустить массовое обновление?`;
+    }
+
+    const confirmed = await this.showConfirm({
+      title: '🎯 МАССОВОЕ ОБНОВЛЕНИЕ HLTB',
+      message: msg,
+      confirmText: '🚀 Запустить',
+      type: 'info'
+    });
+
+    if (!confirmed) return;
+
+    this.showToast('🚀 Запущено массовое обновление времени HLTB. Это может занять некоторое время...', 'info', 5000);
+
+    try {
+        const forceLegacy = isFirstRun;
+        const res = await fetch('/api/hltb/bulk-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force_legacy: forceLegacy })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            localStorage.setItem('hltb_bulk_ran_once', 'true');
+
+            await this.showConfirm({
+                title: '✅ ОБНОВЛЕНИЕ ЗАВЕРШЕНО',
+                message: `
+                    <strong>Статистика:</strong><br>
+                    • Обработано игр: ${data.processed}<br>
+                    • Успешно обновлено HLTB: <span style="color:var(--sv-green);">${data.updated}</span><br>
+                    • Не найдено в HLTB: ${data.not_found}<br>
+                    • Пропущено ручных (защищено): <span style="color:var(--sv-yellow);">${data.skipped_manual}</span>
+                `,
+                confirmText: 'OK',
+                type: 'success'
+            });
+            await this.refreshAllData();
+        } else {
+            this.showAlert(data.error || 'Произошла ошибка при обновлении', 'ОШИБКА HLTB', 'error');
+        }
+    } catch (e) {
+        this.showAlert(e.message, 'ОШИБКА', 'error');
     }
   },
 
