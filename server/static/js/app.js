@@ -2590,7 +2590,22 @@ const app = {
 
     if (!confirmed) return;
 
-    this.showToast('🚀 Запущено массовое обновление времени HLTB...', 'info', 0);
+    this.isHltbBulkRunning = true;
+    const modal = document.getElementById('hltb-bulk-modal');
+    const logBox = document.getElementById('hltb-log-box');
+    const progressBar = document.getElementById('hltb-progress-bar');
+    const countsLabel = document.getElementById('hltb-counts-label');
+    const percentLabel = document.getElementById('hltb-percent-label');
+    const updatedLabel = document.getElementById('hltb-updated-label');
+    const notfoundLabel = document.getElementById('hltb-notfound-label');
+    const skippedLabel = document.getElementById('hltb-skipped-label');
+    const doneBtn = document.getElementById('hltb-done-btn');
+    const statusText = document.getElementById('hltb-status-text');
+
+    if (modal) modal.classList.add('open');
+    if (logBox) logBox.innerHTML = '<div>🚀 Запуск массового обновления HLTB...</div>';
+    if (doneBtn) doneBtn.style.display = 'none';
+    if (statusText) statusText.textContent = 'Получение времени прохождения для игр через HowLongToBeat...';
 
     let currentOffset = 0;
     const limit = 20;
@@ -2605,7 +2620,7 @@ const app = {
     try {
         let hasMore = true;
 
-        while (hasMore) {
+        while (hasMore && this.isHltbBulkRunning) {
             const res = await fetch('/api/hltb/bulk-update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2627,36 +2642,44 @@ const app = {
                 hasMore = data.has_more;
                 currentOffset += limit;
 
-                if (hasMore) {
-                    this.showToast(`🚀 Обработано ${Math.min(currentOffset, totalGames)} из ${totalGames}...`, 'info', 0);
+                const curProcessedDisplay = Math.min(currentOffset, totalGames);
+                const pct = totalGames > 0 ? Math.round((curProcessedDisplay / totalGames) * 100) : 100;
+
+                if (countsLabel) countsLabel.textContent = `Обработано: ${curProcessedDisplay} / ${totalGames}`;
+                if (percentLabel) percentLabel.textContent = `${pct}%`;
+                if (progressBar) progressBar.style.width = `${pct}%`;
+                if (updatedLabel) updatedLabel.textContent = totalUpdated;
+                if (notfoundLabel) notfoundLabel.textContent = totalNotFound;
+                if (skippedLabel) skippedLabel.textContent = totalSkippedManual;
+
+                if (logBox) {
+                    logBox.innerHTML += `<div>Обработано ${curProcessedDisplay} / ${totalGames}...</div>`;
+                    logBox.scrollTop = logBox.scrollHeight;
                 }
             } else {
                 hasMore = false;
+                this.isHltbBulkRunning = false;
                 this.showAlert(data.error || 'Ошибка массового обновления', 'ОШИБКА', 'error');
+                if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Ошибка: ${data.error}</div>`;
                 return;
             }
         }
 
         localStorage.setItem('hltb_bulk_ran_once', 'true');
+        this.isHltbBulkRunning = false;
 
-        this.showToast('✅ Обновление HLTB завершено!', 'success', 3000);
+        if (statusText) statusText.innerHTML = '<span style="color:var(--sv-green);">✅ Обновление HLTB завершено!</span>';
+        if (doneBtn) doneBtn.style.display = 'inline-flex';
 
-        await this.showConfirm({
-            title: '✅ ОБНОВЛЕНИЕ ЗАВЕРШЕНО',
-            message: `
-                <strong>Статистика:</strong><br>
-                • Всего игр в базе: ${totalGames}<br>
-                • Обработано в этот раз: ${totalProcessed}<br>
-                • Успешно обновлено HLTB: <span style="color:var(--sv-green);">${totalUpdated}</span><br>
-                • Не найдено в HLTB: ${totalNotFound}<br>
-                • Пропущено ручных (защищено): <span style="color:var(--sv-yellow);">${totalSkippedManual}</span>
-            `,
-            confirmText: 'OK',
-            type: 'success'
-        });
+        if (logBox) {
+            logBox.innerHTML += `<div style="color:var(--sv-green);">🎉 Готово! Итого обработано: ${totalProcessed}. Обновлено HLTB: ${totalUpdated}.</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
 
         await this.refreshAllData();
     } catch (e) {
+        this.isHltbBulkRunning = false;
+        if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Сетевая ошибка: ${e.message}</div>`;
         this.showAlert(e.message, 'ОШИБКА', 'error');
     }
   },
