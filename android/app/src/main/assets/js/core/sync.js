@@ -412,19 +412,59 @@
     };
   }
 
-  function serverGameToAndroidWishlist(sGame) {
-    let expYear = '';
-    let expMonth = '';
-    if (sGame.release_date) {
-      try {
-        const d = new Date(sGame.release_date);
-        if (!isNaN(d.getTime())) {
-          expYear = d.getFullYear().toString();
-          const months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-          expMonth = months[d.getMonth()];
-        }
-      } catch (e) {}
+  function parseReleaseDate(releaseDateStr) {
+    if (!releaseDateStr || typeof releaseDateStr !== 'string') {
+      return { month: '', year: '' };
     }
+    const trimmed = releaseDateStr.trim();
+    if (!trimmed) {
+      return { month: '', year: '' };
+    }
+
+    const MONTH_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+    // 1. Format MM.YYYY or M.YYYY (e.g., "05.2024")
+    const dotMatch = trimmed.match(/^(\d{1,2})\.(\d{4})$/);
+    if (dotMatch) {
+      const mIdx = parseInt(dotMatch[1], 10) - 1;
+      if (mIdx >= 0 && mIdx < 12) {
+        return { month: MONTH_RU[mIdx], year: dotMatch[2] };
+      }
+      return { month: '', year: dotMatch[2] };
+    }
+
+    // 2. Format YYYY-MM (e.g., "2024-05")
+    const ymMatch = trimmed.match(/^(\d{4})-(\d{1,2})$/);
+    if (ymMatch) {
+      const mIdx = parseInt(ymMatch[2], 10) - 1;
+      if (mIdx >= 0 && mIdx < 12) {
+        return { month: MONTH_RU[mIdx], year: ymMatch[1] };
+      }
+      return { month: '', year: ymMatch[1] };
+    }
+
+    // 3. Date parse (e.g., "2024-05-06" or ISO string)
+    try {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        return {
+          month: MONTH_RU[d.getMonth()],
+          year: d.getFullYear().toString()
+        };
+      }
+    } catch (e) {}
+
+    // 4. Fallback: extract 4-digit year via regex
+    const yearMatch = trimmed.match(/\b(19\d\d|20\d\d)\b/);
+    if (yearMatch) {
+      return { month: '', year: yearMatch[1] };
+    }
+
+    return { month: '', year: '' };
+  }
+
+  function serverGameToAndroidWishlist(sGame) {
+    const { month: expMonth, year: expYear } = parseReleaseDate(sGame.release_date);
 
     return {
       id: sGame.uuid,
@@ -667,28 +707,47 @@
         continue;
       }
 
+      const normServerTitle = (sGame.title || '').trim().toLowerCase();
+      const normServerPlat = normalizePlatformServerToAndroid(sGame.platform);
+
       if (sGame.status === 'backlog') {
         // server backlog -> Android-состояние бэклога («Хочу пройти»)
         const wItem = serverGameToAndroidWishlist(sGame);
-        const idx = updatedWishlist.findIndex(w => w.uuid === sGame.uuid || w.id === sGame.uuid);
+        let idx = updatedWishlist.findIndex(w => w.uuid === sGame.uuid || w.id === sGame.uuid);
+        if (idx < 0) {
+          // Fallback matching by title + platform for items created before sync or during initial sync mismatch
+          idx = updatedWishlist.findIndex(w => {
+            const wTitle = (w.title || '').trim().toLowerCase();
+            const wPlat = normalizePlatformServerToAndroid(w.platform);
+            return wTitle === normServerTitle && wPlat === normServerPlat;
+          });
+        }
         if (idx >= 0) {
           updatedWishlist[idx] = Object.assign({}, updatedWishlist[idx], wItem);
         } else {
           updatedWishlist.unshift(wItem);
         }
         // Remove from games if it was moved to backlog
-        updatedGames = updatedGames.filter(g => g.uuid !== sGame.uuid && g.id !== sGame.uuid);
+        updatedGames = updatedGames.filter(g => g.uuid !== sGame.uuid && g.id !== sGame.uuid && !( (g.title || '').trim().toLowerCase() === normServerTitle && normalizePlatformServerToAndroid(g.platform) === normServerPlat ));
       } else {
         // Belongs to games (playing, completed, dropped, paused)
         const gItem = serverGameToAndroidGame(sGame);
-        const idx = updatedGames.findIndex(g => g.uuid === sGame.uuid || g.id === sGame.uuid);
+        let idx = updatedGames.findIndex(g => g.uuid === sGame.uuid || g.id === sGame.uuid);
+        if (idx < 0) {
+          // Fallback matching by title + platform
+          idx = updatedGames.findIndex(g => {
+            const gTitle = (g.title || '').trim().toLowerCase();
+            const gPlat = normalizePlatformServerToAndroid(g.platform);
+            return gTitle === normServerTitle && gPlat === normServerPlat;
+          });
+        }
         if (idx >= 0) {
           updatedGames[idx] = Object.assign({}, updatedGames[idx], gItem);
         } else {
           updatedGames.unshift(gItem);
         }
         // Remove from wishlist if it was moved to games
-        updatedWishlist = updatedWishlist.filter(w => w.uuid !== sGame.uuid && w.id !== sGame.uuid);
+        updatedWishlist = updatedWishlist.filter(w => w.uuid !== sGame.uuid && w.id !== sGame.uuid && !( (w.title || '').trim().toLowerCase() === normServerTitle && normalizePlatformServerToAndroid(w.platform) === normServerPlat ));
       }
     }
 

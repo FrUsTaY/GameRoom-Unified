@@ -248,6 +248,9 @@ def process_sync(req: SyncRequest) -> SyncResponse:
                     "updated_by": client_id
                 }
 
+                if item.release_date:
+                    patch_data["release_date"] = item.release_date
+
                 # Only update Category B fields if provided and not empty
                 if item.rawg_id:
                     patch_data["rawg_id"] = item.rawg_id
@@ -479,19 +482,29 @@ def process_initial_sync(req: InitialSyncRequest) -> InitialSyncResponse:
             if not matched_server_game and incoming_rawg_id and incoming_rawg_id in rawg_index:
                 matched_server_game = rawg_index[incoming_rawg_id]
 
-            # Level 2: Match by normalized title + platform + year (+-1)
+            # Level 2: Match by normalized title + platform (+-1 year preferred, or distinctive title)
             if not matched_server_game:
+                # First pass: exact title + platform + year +-1 (highest confidence)
                 for sg in server_games:
                     sg_norm_title = normalize_title(sg.get("title", ""))
                     sg_norm_plat = normalize_platform(sg.get("platform", ""))
                     if incoming_norm_title == sg_norm_title and incoming_platform == sg_norm_plat:
                         sg_year = extract_year(sg.get("release_date") or sg.get("created_at"))
-                        # If years are known, enforce +-1 year difference; if unknown, only match if title is distinctive (>3 chars)
                         if incoming_year and sg_year:
                             if abs(incoming_year - sg_year) <= 1:
                                 matched_server_game = sg
                                 break
                         elif len(incoming_norm_title) >= 4:
+                            matched_server_game = sg
+                            break
+
+                # Second pass: if no year-matching candidate was found, match by exact distinctive title + platform
+                # This covers cases where RAWG had an erroneous year (e.g. Hades 2: 2001 vs 2024) or user edited the year on web
+                if not matched_server_game and len(incoming_norm_title) >= 4:
+                    for sg in server_games:
+                        sg_norm_title = normalize_title(sg.get("title", ""))
+                        sg_norm_plat = normalize_platform(sg.get("platform", ""))
+                        if incoming_norm_title == sg_norm_title and incoming_platform == sg_norm_plat:
                             matched_server_game = sg
                             break
 

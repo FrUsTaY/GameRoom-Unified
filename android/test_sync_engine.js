@@ -491,8 +491,83 @@ async function runTests() {
   assert.strictEqual(roundtripGame.rating, '5/10', '5/10 with prohodnyak must roundtrip back to 5/10 in Android');
   console.log('✔ Android 5/10 maps to prohodnyak and roundtrips accurately to 5/10');
 
+  console.log('\n--- 23. Rule 18: Release year parsing from server for backlog (Hades 2 2024 update) ---');
+  const serverHades2_iso = {
+    uuid: 'uuid-hades-2',
+    title: 'Hades 2',
+    status: 'backlog',
+    platform: 'PC',
+    release_date: '2024-05-06'
+  };
+  const wHades2_iso = sync.serverGameToAndroidWishlist(serverHades2_iso);
+  assert.strictEqual(wHades2_iso.expectedYear, '2024');
+  assert.strictEqual(wHades2_iso.expectedMonth, 'Май');
+
+  const serverHades2_yearOnly = {
+    uuid: 'uuid-hades-2-year',
+    title: 'Hades 2',
+    status: 'backlog',
+    platform: 'PC',
+    release_date: '2024'
+  };
+  const wHades2_yearOnly = sync.serverGameToAndroidWishlist(serverHades2_yearOnly);
+  assert.strictEqual(wHades2_yearOnly.expectedYear, '2024');
+
+  const serverHades2_dotFormat = {
+    uuid: 'uuid-hades-2-dot',
+    title: 'Hades 2',
+    status: 'backlog',
+    platform: 'PC',
+    release_date: '05.2024'
+  };
+  const wHades2_dotFormat = sync.serverGameToAndroidWishlist(serverHades2_dotFormat);
+  assert.strictEqual(wHades2_dotFormat.expectedYear, '2024');
+  assert.strictEqual(wHades2_dotFormat.expectedMonth, 'Май');
+  console.log('✔ Server release_date parses expectedYear 2024 correctly across ISO, year-only, and MM.YYYY formats');
+
+  console.log('\n--- 24. Rule 19: Delta Sync reconciles backlog game with differing UUID by title + platform ---');
+  localStorage.setItem(sync.KEYS.LAST_SYNC, '2026-10-10T12:00:00Z');
+  // Client has Hades 2 with 2001 and local UUID
+  const clientWishlist = [{
+    id: 'local-hades-uuid',
+    uuid: 'local-hades-uuid',
+    title: 'Hades 2',
+    platform: 'Домашний ПК',
+    expectedYear: '2001',
+    expectedMonth: 'Январь'
+  }];
+  // Server has Hades 2 with 2024 and server UUID
+  mockFetchHandler = async (url, options) => {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        server_time: '2026-10-12T16:00:00Z',
+        ack: { applied_created: [], applied_updated: [], applied_deleted: [] },
+        server_changes: {
+          created: [],
+          updated: [{
+            uuid: 'server-hades-uuid',
+            title: 'Hades 2',
+            status: 'backlog',
+            platform: 'PC',
+            release_date: '2024-05-06'
+          }],
+          deleted: []
+        }
+      })
+    };
+  };
+
+  const deltaResult = await sync.performDeltaSync('http://test-server', 'test-token', [], clientWishlist);
+  assert.strictEqual(deltaResult.wishlist.length, 1, 'Should reconcile without creating duplicate entry');
+  assert.strictEqual(deltaResult.wishlist[0].expectedYear, '2024', 'Expected year should update to 2024');
+  assert.strictEqual(deltaResult.wishlist[0].uuid, 'server-hades-uuid', 'UUID should update to server UUID');
+  console.log('✔ Delta sync correctly updates release year to 2024 and prevents duplicates');
+
   console.log('\n============================================================');
-  console.log('ALL 22 TEST SUITES AND ALL 17 DISCREPANCY RULES PASSED! ✔');
+  console.log('ALL 24 TEST SUITES AND ALL 19 DISCREPANCY RULES PASSED! ✔');
   console.log('============================================================');
 }
 

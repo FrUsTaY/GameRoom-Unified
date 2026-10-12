@@ -616,5 +616,64 @@ class TestSyncEdgeCases(unittest.TestCase):
         self.assertEqual(synced_game2["user_score"], 10)
         self.assertEqual(synced_game2["completed_at"], "09.2026")
 
+    def test_09_backlog_release_date_propagation(self):
+        """
+        Tests that when release_date is updated on web for a backlog game (e.g. Hades 2: 2001 -> 2024),
+        it propagates in delta sync and merges properly in initial sync.
+        """
+        # 1. Create a game on server with Hades 2 release date 2024-05-06
+        hades_uuid = str(uuid.uuid4())
+        g = db.create_game({
+            "uuid": hades_uuid,
+            "title": "Hades 2",
+            "status": "backlog",
+            "platform": "PC",
+            "release_date": "2024-05-06",
+            "updated_by": "web-admin"
+        })
+
+        # 2. Test Initial Sync merge with Android game that had 2001 release year
+        init_res = self.client.post("/api/sync/initial", json={
+            "client_id": "test-android-hades",
+            "client_version": "1.0",
+            "source": "android",
+            "games": [],
+            "wishlist": [{
+                "title": "Hades 2",
+                "platform": "Домашний ПК",
+                "expectedYear": "2001",
+                "expectedMonth": "Январь"
+            }]
+        }, headers=self.headers)
+        self.assertEqual(init_res.status_code, 200)
+        init_data = init_res.json()
+        self.assertTrue(init_data["success"])
+        # Should have merged into existing server game rather than duplicating
+        self.assertEqual(init_data["merged_count"], 1)
+        self.assertEqual(init_data["created_count"], 0)
+        hades_in_master = next((x for x in init_data["games"] if x["uuid"] == hades_uuid), None)
+        self.assertIsNotNone(hades_in_master)
+        self.assertEqual(hades_in_master["release_date"], "2024-05-06")
+
+        # 3. Test Delta Sync receives updated release date when web updates it
+        server_sync_time = init_data["server_time"]
+        db.update_game(g["id"], {
+            "release_date": "2024-12-31",
+            "updated_by": "web-admin"
+        })
+        delta_res = self.client.post("/api/sync", json={
+            "client_id": "test-android-hades",
+            "client_version": "1.0",
+            "client_time_now": datetime.now(timezone.utc).isoformat(),
+            "last_sync_timestamp": server_sync_time,
+            "changes": {"created": [], "updated": [], "deleted": []}
+        }, headers=self.headers)
+        self.assertEqual(delta_res.status_code, 200)
+        delta_data = delta_res.json()
+        updated_hades = next((x for x in delta_data["server_changes"]["updated"] if x["uuid"] == hades_uuid), None)
+        self.assertIsNotNone(updated_hades)
+        self.assertEqual(updated_hades["release_date"], "2024-12-31")
+
 if __name__ == "__main__":
     unittest.main()
+
