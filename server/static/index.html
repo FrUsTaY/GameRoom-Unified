@@ -110,6 +110,11 @@
       
       <!-- TAB 1: NOW PLAYING -->
       <section class="tab-pane active" id="tab-playing">
+        <div class="filter-bar" style="margin-bottom: 20px;">
+          <div class="filter-group" style="flex:1;">
+            <input type="text" class="sv-input" id="playing-search" placeholder="Поиск в процессе (по названию, жанру)...">
+          </div>
+        </div>
         <div id="playing-hero-container" class="hero-playing-grid">
           <!-- Rendered via JS -->
         </div>
@@ -187,6 +192,8 @@
             <select class="sv-select" id="backlog-sort">
               <option value="created_at_desc">Новые добавленные</option>
               <option value="priority_desc">По приоритету</option>
+              <option value="release_date_desc">Дата выхода: сначала новые</option>
+              <option value="release_date_asc">Дата выхода: сначала старые</option>
               <option value="playtime_asc">Время: сначала короткие</option>
               <option value="playtime_desc">Время: сначала длинные</option>
               <option value="rating_desc">По оценке RAWG</option>
@@ -254,6 +261,11 @@
 
       <!-- TAB 5: PAUSED / DROPPED -->
       <section class="tab-pane" id="tab-paused">
+        <div class="filter-bar" style="margin-bottom: 20px;">
+          <div class="filter-group" style="flex:1;">
+            <input type="text" class="sv-input" id="paused-search" placeholder="Поиск среди паузы и дропнутых...">
+          </div>
+        </div>
         <div class="games-grid" id="paused-grid">
           <!-- Rendered via JS -->
         </div>

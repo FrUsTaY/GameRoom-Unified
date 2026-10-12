@@ -211,6 +211,18 @@ const app = {
       btnAddGame.addEventListener('click', () => this.openGameModal());
     }
 
+    // Playing search trigger
+    const playingSearch = document.getElementById('playing-search');
+    if (playingSearch) {
+      playingSearch.addEventListener('input', () => this.renderPlayingView());
+    }
+
+    // Paused search trigger
+    const pausedSearch = document.getElementById('paused-search');
+    if (pausedSearch) {
+      pausedSearch.addEventListener('input', () => this.renderPausedView());
+    }
+
     // Backlog live filter triggers
     ['backlog-search', 'backlog-platform-filter', 'backlog-genre-filter', 'backlog-priority-filter', 'backlog-sort'].forEach(id => {
       const el = document.getElementById(id);
@@ -571,7 +583,16 @@ const app = {
     const emptyState = document.getElementById('playing-empty-state');
     if (!container) return;
 
-    const playingGames = this.games.filter(g => g.status === 'playing');
+    let playingGames = this.games.filter(g => g.status === 'playing');
+
+    const searchTerm = (document.getElementById('playing-search')?.value || '').toLowerCase().trim();
+    if (searchTerm) {
+      playingGames = playingGames.filter(g => 
+        (g.title || '').toLowerCase().includes(searchTerm) || 
+        (g.genres || '').toLowerCase().includes(searchTerm) ||
+        (g.platform || '').toLowerCase().includes(searchTerm)
+      );
+    }
 
     if (playingGames.length === 0) {
       container.innerHTML = '';
@@ -683,6 +704,16 @@ const app = {
     else if (sortBy === 'playtime_desc') list.sort((a, b) => (b.playtime_main || 0) - (a.playtime_main || 0));
     else if (sortBy === 'rating_desc') list.sort((a, b) => (b.rawg_rating || 0) - (a.rawg_rating || 0));
     else if (sortBy === 'title_asc') list.sort((a, b) => a.title.localeCompare(b.title));
+    else if (sortBy === 'release_date_desc') {
+      list.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
+    }
+    else if (sortBy === 'release_date_asc') {
+      list.sort((a, b) => {
+        if (!a.release_date) return 1;
+        if (!b.release_date) return -1;
+        return a.release_date.localeCompare(b.release_date);
+      });
+    }
     else if (sortBy === 'priority_desc') {
       const pWeights = { urgent: 1, high: 2, medium: 3, low: 4 };
       list.sort((a, b) => (pWeights[a.priority] || 5) - (pWeights[b.priority] || 5));
@@ -764,10 +795,20 @@ const app = {
     const grid = document.getElementById('paused-grid');
     if (!grid) return;
 
-    const list = this.games.filter(g => g.status === 'paused' || g.status === 'dropped');
+    let list = this.games.filter(g => g.status === 'paused' || g.status === 'dropped');
+
+    const searchTerm = (document.getElementById('paused-search')?.value || '').toLowerCase().trim();
+    if (searchTerm) {
+      list = list.filter(g => 
+        (g.title || '').toLowerCase().includes(searchTerm) || 
+        (g.genres || '').toLowerCase().includes(searchTerm) ||
+        (g.platform || '').toLowerCase().includes(searchTerm) ||
+        (g.notes || '').toLowerCase().includes(searchTerm)
+      );
+    }
 
     if (list.length === 0) {
-      grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:var(--sv-text-muted);">Нет игр на паузе или дропнутых.</div>`;
+      grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:var(--sv-text-muted);">Нет игр на паузе или дропнутых по вашему запросу.</div>`;
       return;
     }
 
