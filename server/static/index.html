@@ -1013,9 +1013,23 @@
       <button type="button" class="modal-close-btn" onclick="app.closeModal('hltb-bulk-modal')">&times;</button>
     </div>
     <div class="modal-body" style="padding: 20px 24px;">
-      <p style="color:var(--sv-text-secondary); font-size:0.9rem; margin-bottom:16px;" id="hltb-status-text">
+      <p style="color:var(--sv-text-secondary); font-size:0.9rem; margin-bottom:14px;" id="hltb-status-text">
         Получение времени прохождения для игр через HowLongToBeat...
       </p>
+
+      <div style="background:rgba(255,255,255,0.03); border:1px solid var(--sv-border); border-radius:6px; padding:12px; margin-bottom:16px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.9rem; font-weight:700; color:var(--sv-text-main);">
+          <input type="checkbox" id="hltb-force-all-check" style="cursor:pointer; width:16px; height:16px;">
+          <span>Пересканировать все игры заново</span>
+        </label>
+        <p style="margin:4px 0 0 24px; font-size:0.75rem; color:var(--sv-text-muted);">
+          Если выключено: сканируются только новые игры и игры без времени HLTB. Ручные значения защищены в любом режиме.
+        </p>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-bottom:14px;" id="hltb-start-wrap">
+        <button type="button" class="sv-btn sv-btn-cyan" id="hltb-start-btn" onclick="app.runHltbBulkLoop()">🚀 Начать поиск</button>
+      </div>
 
       <div class="progress-bar-wrap" style="height:16px; margin-bottom:14px; background:var(--sv-bg-deep); border:1px solid var(--sv-border-bright);">
         <div class="progress-bar-fill" id="hltb-progress-bar" style="width: 0%; background:linear-gradient(90deg, var(--sv-yellow), var(--sv-orange));"></div>

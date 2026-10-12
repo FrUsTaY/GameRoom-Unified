@@ -271,9 +271,13 @@ def bulk_hltb_update(req: BulkHltbUpdateRequest):
 
     for g in chunk:
         source = g.get("playtime_source", "legacy")
-        # NEVER touch manual, regardless of force_legacy
+        # NEVER touch manual, regardless of force_all
         if source == "manual":
             skipped_manual += 1
+            continue
+
+        # If not force_all, skip games that already have verified HLTB playtime
+        if not req.force_all and source == "hltb" and g.get("playtime_main") and g.get("playtime_main") > 0:
             continue
 
         processed += 1

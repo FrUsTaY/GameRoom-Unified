@@ -2614,24 +2614,7 @@ const app = {
     }
   },
 
-  async startBulkHltbUpdate() {
-    const isFirstRun = !localStorage.getItem('hltb_bulk_ran_once');
-
-    let msg = `Массово обновить время прохождения у всех игр через HowLongToBeat?`;
-    if (isFirstRun) {
-        msg = `<strong>Внимание: первый запуск!</strong><br><br>У существующих игр источник времени пока неизвестен. Первый полный проход может заменить старые значения на данные HLTB. После ручного редактирования значения будут защищены от последующих HLTB-обновлений.<br><br>Запустить массовое обновление?`;
-    }
-
-    const confirmed = await this.showConfirm({
-      title: '🎯 МАССОВОЕ ОБНОВЛЕНИЕ HLTB',
-      message: msg,
-      confirmText: '🚀 Запустить',
-      type: 'info'
-    });
-
-    if (!confirmed) return;
-
-    this.isHltbBulkRunning = true;
+  startBulkHltbUpdate() {
     const modal = document.getElementById('hltb-bulk-modal');
     const logBox = document.getElementById('hltb-log-box');
     const progressBar = document.getElementById('hltb-progress-bar');
@@ -2642,15 +2625,53 @@ const app = {
     const skippedLabel = document.getElementById('hltb-skipped-label');
     const doneBtn = document.getElementById('hltb-done-btn');
     const statusText = document.getElementById('hltb-status-text');
+    const startWrap = document.getElementById('hltb-start-wrap');
+    const startBtn = document.getElementById('hltb-start-btn');
+    const forceAllCheck = document.getElementById('hltb-force-all-check');
 
     if (modal) modal.classList.add('open');
-    if (logBox) logBox.innerHTML = '<div>🚀 Запуск массового обновления HLTB...</div>';
+    if (logBox) logBox.innerHTML = '<div>Готово к запуску. Выберите режим и нажмите «Начать поиск».</div>';
     if (doneBtn) doneBtn.style.display = 'none';
+    if (startWrap) startWrap.style.display = 'flex';
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.textContent = '🚀 Начать поиск';
+    }
+    if (forceAllCheck) forceAllCheck.checked = false;
     if (statusText) statusText.textContent = 'Получение времени прохождения для игр через HowLongToBeat...';
+    if (progressBar) progressBar.style.width = '0%';
+    if (countsLabel) countsLabel.textContent = 'Обработано: 0 / 0';
+    if (percentLabel) percentLabel.textContent = '0%';
+    if (updatedLabel) updatedLabel.textContent = '0';
+    if (notfoundLabel) notfoundLabel.textContent = '0';
+    if (skippedLabel) skippedLabel.textContent = '0';
+  },
+
+  async runHltbBulkLoop() {
+    const startBtn = document.getElementById('hltb-start-btn');
+    const forceAllCheck = document.getElementById('hltb-force-all-check');
+    const forceAll = forceAllCheck ? forceAllCheck.checked : false;
+
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.textContent = '⏳ Поиск в процессе...';
+    }
+
+    this.isHltbBulkRunning = true;
+    const logBox = document.getElementById('hltb-log-box');
+    const progressBar = document.getElementById('hltb-progress-bar');
+    const countsLabel = document.getElementById('hltb-counts-label');
+    const percentLabel = document.getElementById('hltb-percent-label');
+    const updatedLabel = document.getElementById('hltb-updated-label');
+    const notfoundLabel = document.getElementById('hltb-notfound-label');
+    const skippedLabel = document.getElementById('hltb-skipped-label');
+    const doneBtn = document.getElementById('hltb-done-btn');
+    const statusText = document.getElementById('hltb-status-text');
+
+    if (logBox) logBox.innerHTML = `<div>🚀 Запуск поиска HLTB (${forceAll ? 'Режим: Пересканировать ВСЕ игры' : 'Режим: Только новые и без времени'})...</div>`;
 
     let currentOffset = 0;
     const limit = 20;
-    const forceLegacy = isFirstRun;
 
     let totalProcessed = 0;
     let totalUpdated = 0;
@@ -2666,7 +2687,7 @@ const app = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    force_legacy: forceLegacy,
+                    force_all: forceAll,
                     offset: currentOffset,
                     limit: limit
                 })
@@ -2702,18 +2723,23 @@ const app = {
                 this.isHltbBulkRunning = false;
                 this.showAlert(data.error || 'Ошибка массового обновления', 'ОШИБКА', 'error');
                 if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Ошибка: ${data.error}</div>`;
+                if (startBtn) {
+                  startBtn.disabled = false;
+                  startBtn.textContent = '🚀 Начать поиск';
+                }
                 return;
             }
         }
 
-        localStorage.setItem('hltb_bulk_ran_once', 'true');
         this.isHltbBulkRunning = false;
 
-        if (statusText) statusText.innerHTML = '<span style="color:var(--sv-green);">✅ Обновление HLTB завершено!</span>';
+        if (statusText) statusText.innerHTML = '<span style="color:var(--sv-green);">✅ Поиск HLTB завершен!</span>';
         if (doneBtn) doneBtn.style.display = 'inline-flex';
+        const startWrap = document.getElementById('hltb-start-wrap');
+        if (startWrap) startWrap.style.display = 'none';
 
         if (logBox) {
-            logBox.innerHTML += `<div style="color:var(--sv-green);">🎉 Готово! Итого обработано: ${totalProcessed}. Обновлено HLTB: ${totalUpdated}.</div>`;
+            logBox.innerHTML += `<div style="color:var(--sv-green);">🎉 Готово! Проверено: ${totalProcessed}. Обновлено HLTB: ${totalUpdated}. Пропущено ручных: ${totalSkippedManual}.</div>`;
             logBox.scrollTop = logBox.scrollHeight;
         }
 
@@ -2722,6 +2748,10 @@ const app = {
         this.isHltbBulkRunning = false;
         if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Сетевая ошибка: ${e.message}</div>`;
         this.showAlert(e.message, 'ОШИБКА', 'error');
+        if (startBtn) {
+          startBtn.disabled = false;
+          startBtn.textContent = '🚀 Начать поиск';
+        }
     }
   },
 
