@@ -211,6 +211,18 @@ const app = {
       btnAddGame.addEventListener('click', () => this.openGameModal());
     }
 
+    // Playing search trigger
+    const playingSearch = document.getElementById('playing-search');
+    if (playingSearch) {
+      playingSearch.addEventListener('input', () => this.renderPlayingView());
+    }
+
+    // Paused search trigger
+    const pausedSearch = document.getElementById('paused-search');
+    if (pausedSearch) {
+      pausedSearch.addEventListener('input', () => this.renderPausedView());
+    }
+
     // Backlog live filter triggers
     ['backlog-search', 'backlog-platform-filter', 'backlog-genre-filter', 'backlog-priority-filter', 'backlog-sort'].forEach(id => {
       const el = document.getElementById(id);
@@ -571,7 +583,16 @@ const app = {
     const emptyState = document.getElementById('playing-empty-state');
     if (!container) return;
 
-    const playingGames = this.games.filter(g => g.status === 'playing');
+    let playingGames = this.games.filter(g => g.status === 'playing');
+
+    const searchTerm = (document.getElementById('playing-search')?.value || '').toLowerCase().trim();
+    if (searchTerm) {
+      playingGames = playingGames.filter(g => 
+        (g.title || '').toLowerCase().includes(searchTerm) || 
+        (g.genres || '').toLowerCase().includes(searchTerm) ||
+        (g.platform || '').toLowerCase().includes(searchTerm)
+      );
+    }
 
     if (playingGames.length === 0) {
       container.innerHTML = '';
@@ -683,6 +704,16 @@ const app = {
     else if (sortBy === 'playtime_desc') list.sort((a, b) => (b.playtime_main || 0) - (a.playtime_main || 0));
     else if (sortBy === 'rating_desc') list.sort((a, b) => (b.rawg_rating || 0) - (a.rawg_rating || 0));
     else if (sortBy === 'title_asc') list.sort((a, b) => a.title.localeCompare(b.title));
+    else if (sortBy === 'release_date_desc') {
+      list.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''));
+    }
+    else if (sortBy === 'release_date_asc') {
+      list.sort((a, b) => {
+        if (!a.release_date) return 1;
+        if (!b.release_date) return -1;
+        return a.release_date.localeCompare(b.release_date);
+      });
+    }
     else if (sortBy === 'priority_desc') {
       const pWeights = { urgent: 1, high: 2, medium: 3, low: 4 };
       list.sort((a, b) => (pWeights[a.priority] || 5) - (pWeights[b.priority] || 5));
@@ -764,10 +795,20 @@ const app = {
     const grid = document.getElementById('paused-grid');
     if (!grid) return;
 
-    const list = this.games.filter(g => g.status === 'paused' || g.status === 'dropped');
+    let list = this.games.filter(g => g.status === 'paused' || g.status === 'dropped');
+
+    const searchTerm = (document.getElementById('paused-search')?.value || '').toLowerCase().trim();
+    if (searchTerm) {
+      list = list.filter(g => 
+        (g.title || '').toLowerCase().includes(searchTerm) || 
+        (g.genres || '').toLowerCase().includes(searchTerm) ||
+        (g.platform || '').toLowerCase().includes(searchTerm) ||
+        (g.notes || '').toLowerCase().includes(searchTerm)
+      );
+    }
 
     if (list.length === 0) {
-      grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:var(--sv-text-muted);">Нет игр на паузе или дропнутых.</div>`;
+      grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color:var(--sv-text-muted);">Нет игр на паузе или дропнутых по вашему запросу.</div>`;
       return;
     }
 
@@ -1204,6 +1245,11 @@ const app = {
     this.selectedModalGrade = '';
     document.getElementById('form-rating-grade').value = '';
 
+    // Reset playtime tracking state
+    this.originalPlaytimeMain = null;
+    this.playtimeSourceOverride = null;
+    this.lastAutofilledTime = null;
+
     if (gameId) {
       if (delBtn) delBtn.style.display = 'inline-flex';
       const game = this.games.find(g => g.id === gameId);
@@ -1219,6 +1265,7 @@ const app = {
         document.getElementById('form-developer').value = game.developer || '';
         document.getElementById('form-cover-url').value = game.cover_url || '';
         document.getElementById('form-playtime-main').value = game.playtime_main || '';
+        this.originalPlaytimeMain = game.playtime_main || 0;
         document.getElementById('form-user-playtime').value = game.user_playtime_minutes || 0;
         document.getElementById('form-user-review').value = game.user_review || '';
         document.getElementById('form-notes').value = game.notes || '';
@@ -1330,6 +1377,9 @@ const app = {
   async saveGameForm() {
     const id = document.getElementById('form-game-id').value;
     const gradeVal = document.getElementById('form-rating-grade').value || '';
+
+    let playtimeMainVal = parseFloat(document.getElementById('form-playtime-main').value) || 0.0;
+
     const payload = {
       title: document.getElementById('form-title').value,
       status: document.getElementById('form-status').value,
@@ -1340,13 +1390,41 @@ const app = {
       genres: document.getElementById('form-genres').value || 'Экшен',
       developer: document.getElementById('form-developer').value,
       cover_url: document.getElementById('form-cover-url').value,
-      playtime_main: parseFloat(document.getElementById('form-playtime-main').value) || 0.0,
+      playtime_main: playtimeMainVal,
       user_playtime_minutes: parseInt(document.getElementById('form-user-playtime').value, 10) || 0,
       rating_grade: gradeVal,
       user_score: this.gradeToScore(gradeVal),
       user_review: document.getElementById('form-user-review').value || '',
       notes: document.getElementById('form-notes').value
     };
+
+    if (id) {
+        if (this.playtimeSourceOverride) {
+            // Priority 1: HLTB autofill set it, but user might have manually overridden it after
+            const isDifferentFromAutofill = Math.abs(playtimeMainVal - (this.lastAutofilledTime || 0)) > 0.01;
+            if (this.playtimeSourceOverride === 'hltb' && isDifferentFromAutofill) {
+                payload.playtime_source = 'manual';
+            } else {
+                payload.playtime_source = this.playtimeSourceOverride;
+            }
+        } else if (this.originalPlaytimeMain !== null && Math.abs(playtimeMainVal - this.originalPlaytimeMain) > 0.01) {
+            // Priority 2: User manually changed the value
+            payload.playtime_source = 'manual';
+        }
+    } else {
+        // new game
+        if (this.playtimeSourceOverride) {
+            const isDifferentFromAutofill = Math.abs(playtimeMainVal - (this.lastAutofilledTime || 0)) > 0.01;
+            if (this.playtimeSourceOverride === 'hltb' && isDifferentFromAutofill) {
+                payload.playtime_source = 'manual';
+            } else {
+                payload.playtime_source = this.playtimeSourceOverride;
+            }
+        } else if (playtimeMainVal > 0) {
+            // user entered time manually on create
+            payload.playtime_source = 'manual';
+        }
+    }
 
     try {
       if (id) {
@@ -2520,6 +2598,8 @@ const app = {
         const hltbData = await hltbRes.json();
         if (hltbData.success && hltbData.playtime && playtimeInput) {
             playtimeInput.value = hltbData.playtime;
+            this.playtimeSourceOverride = 'hltb';
+            this.lastAutofilledTime = hltbData.playtime;
         } else if (playtimeInput) {
             playtimeInput.value = ''; // Ensure it's left empty if not found
         }
@@ -2531,6 +2611,147 @@ const app = {
       this.showToast(`Данные и обложка для «${item.title}» успешно загружены!`, 'success');
     } catch (e) {
       this.showAlert(e.message, 'ОШИБКА RAWG', 'error');
+    }
+  },
+
+  startBulkHltbUpdate() {
+    const modal = document.getElementById('hltb-bulk-modal');
+    const logBox = document.getElementById('hltb-log-box');
+    const progressBar = document.getElementById('hltb-progress-bar');
+    const countsLabel = document.getElementById('hltb-counts-label');
+    const percentLabel = document.getElementById('hltb-percent-label');
+    const updatedLabel = document.getElementById('hltb-updated-label');
+    const notfoundLabel = document.getElementById('hltb-notfound-label');
+    const skippedLabel = document.getElementById('hltb-skipped-label');
+    const doneBtn = document.getElementById('hltb-done-btn');
+    const statusText = document.getElementById('hltb-status-text');
+    const startWrap = document.getElementById('hltb-start-wrap');
+    const startBtn = document.getElementById('hltb-start-btn');
+    const forceAllCheck = document.getElementById('hltb-force-all-check');
+
+    if (modal) modal.classList.add('open');
+    if (logBox) logBox.innerHTML = '<div>Готово к запуску. Выберите режим и нажмите «Начать поиск».</div>';
+    if (doneBtn) doneBtn.style.display = 'none';
+    if (startWrap) startWrap.style.display = 'flex';
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.textContent = '🚀 Начать поиск';
+    }
+    if (forceAllCheck) forceAllCheck.checked = false;
+    if (statusText) statusText.textContent = 'Получение времени прохождения для игр через HowLongToBeat...';
+    if (progressBar) progressBar.style.width = '0%';
+    if (countsLabel) countsLabel.textContent = 'Обработано: 0 / 0';
+    if (percentLabel) percentLabel.textContent = '0%';
+    if (updatedLabel) updatedLabel.textContent = '0';
+    if (notfoundLabel) notfoundLabel.textContent = '0';
+    if (skippedLabel) skippedLabel.textContent = '0';
+  },
+
+  async runHltbBulkLoop() {
+    const startBtn = document.getElementById('hltb-start-btn');
+    const forceAllCheck = document.getElementById('hltb-force-all-check');
+    const forceAll = forceAllCheck ? forceAllCheck.checked : false;
+
+    if (startBtn) {
+      startBtn.disabled = true;
+      startBtn.textContent = '⏳ Поиск в процессе...';
+    }
+
+    this.isHltbBulkRunning = true;
+    const logBox = document.getElementById('hltb-log-box');
+    const progressBar = document.getElementById('hltb-progress-bar');
+    const countsLabel = document.getElementById('hltb-counts-label');
+    const percentLabel = document.getElementById('hltb-percent-label');
+    const updatedLabel = document.getElementById('hltb-updated-label');
+    const notfoundLabel = document.getElementById('hltb-notfound-label');
+    const skippedLabel = document.getElementById('hltb-skipped-label');
+    const doneBtn = document.getElementById('hltb-done-btn');
+    const statusText = document.getElementById('hltb-status-text');
+
+    if (logBox) logBox.innerHTML = `<div>🚀 Запуск поиска HLTB (${forceAll ? 'Режим: Пересканировать ВСЕ игры' : 'Режим: Только новые и без времени'})...</div>`;
+
+    let currentOffset = 0;
+    const limit = 20;
+
+    let totalProcessed = 0;
+    let totalUpdated = 0;
+    let totalNotFound = 0;
+    let totalSkippedManual = 0;
+    let totalGames = 0;
+
+    try {
+        let hasMore = true;
+
+        while (hasMore && this.isHltbBulkRunning) {
+            const res = await fetch('/api/hltb/bulk-update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    force_all: forceAll,
+                    offset: currentOffset,
+                    limit: limit
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                totalProcessed += data.processed;
+                totalUpdated += data.updated;
+                totalNotFound += data.not_found;
+                totalSkippedManual += data.skipped_manual;
+                totalGames = data.total;
+
+                hasMore = data.has_more;
+                currentOffset += limit;
+
+                const curProcessedDisplay = Math.min(currentOffset, totalGames);
+                const pct = totalGames > 0 ? Math.round((curProcessedDisplay / totalGames) * 100) : 100;
+
+                if (countsLabel) countsLabel.textContent = `Обработано: ${curProcessedDisplay} / ${totalGames}`;
+                if (percentLabel) percentLabel.textContent = `${pct}%`;
+                if (progressBar) progressBar.style.width = `${pct}%`;
+                if (updatedLabel) updatedLabel.textContent = totalUpdated;
+                if (notfoundLabel) notfoundLabel.textContent = totalNotFound;
+                if (skippedLabel) skippedLabel.textContent = totalSkippedManual;
+
+                if (logBox) {
+                    logBox.innerHTML += `<div>Обработано ${curProcessedDisplay} / ${totalGames}...</div>`;
+                    logBox.scrollTop = logBox.scrollHeight;
+                }
+            } else {
+                hasMore = false;
+                this.isHltbBulkRunning = false;
+                this.showAlert(data.error || 'Ошибка массового обновления', 'ОШИБКА', 'error');
+                if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Ошибка: ${data.error}</div>`;
+                if (startBtn) {
+                  startBtn.disabled = false;
+                  startBtn.textContent = '🚀 Начать поиск';
+                }
+                return;
+            }
+        }
+
+        this.isHltbBulkRunning = false;
+
+        if (statusText) statusText.innerHTML = '<span style="color:var(--sv-green);">✅ Поиск HLTB завершен!</span>';
+        if (doneBtn) doneBtn.style.display = 'inline-flex';
+        const startWrap = document.getElementById('hltb-start-wrap');
+        if (startWrap) startWrap.style.display = 'none';
+
+        if (logBox) {
+            logBox.innerHTML += `<div style="color:var(--sv-green);">🎉 Готово! Проверено: ${totalProcessed}. Обновлено HLTB: ${totalUpdated}. Пропущено ручных: ${totalSkippedManual}.</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        await this.refreshAllData();
+    } catch (e) {
+        this.isHltbBulkRunning = false;
+        if (logBox) logBox.innerHTML += `<div style="color:var(--sv-red);">❌ Сетевая ошибка: ${e.message}</div>`;
+        this.showAlert(e.message, 'ОШИБКА', 'error');
+        if (startBtn) {
+          startBtn.disabled = false;
+          startBtn.textContent = '🚀 Начать поиск';
+        }
     }
   },
 

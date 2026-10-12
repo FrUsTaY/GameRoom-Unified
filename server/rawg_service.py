@@ -186,6 +186,8 @@ def quick_add_game(rawg_id: Optional[int], target_status: str = "backlog", game_
     else:
         genres_str = "Экшен"
 
+    target_plat = details.get("platform") or "PC"
+
     new_game_data = {
         "title": details.get("title") or details.get("name") or "Новая игра",
         "slug": details.get("slug", ""),
@@ -193,15 +195,16 @@ def quick_add_game(rawg_id: Optional[int], target_status: str = "backlog", game_
         "cover_url": details.get("cover_url") or details.get("background_image") or "",
         "background_url": details.get("background_url") or details.get("background_image") or "",
         "status": target_status,
-        "platform": details.get("platform") or "PC",
-        "platforms_list": details.get("platforms_list") or ["PC"],
+        "platform": target_plat,
+        "platforms_list": details.get("platforms_list") or [target_plat],
         "genres": genres_str,
-        "release_date": details.get("release_date") or details.get("released") or "",
+        "release_date": (details.get("platform_release_dates", {}).get(target_plat) or details.get("release_date") or details.get("released") or ""),
         "developer": details.get("developer") or "",
         "publisher": details.get("publisher") or "",
         "rawg_rating": float(details.get("rawg_rating") or details.get("rating") or 0.0),
         "metacritic": int(details.get("metacritic") or 0),
         "playtime_main": playtime_main,
+        "playtime_source": "hltb" if playtime_main and playtime_main > 0 else "legacy",
         "playtime_extra": playtime_extra,
         "playtime_completionist": playtime_completionist,
         "user_playtime_minutes": 0,
@@ -257,6 +260,15 @@ def format_rawg_game_summary(item: Dict[str, Any]) -> Dict[str, Any]:
         else:
             primary_platform = platforms[0]
 
+    # Map platform-specific release dates
+    platform_release_dates = {}
+    for p in platforms_items:
+        if isinstance(p, dict):
+            p_name = p.get("platform", {}).get("name")
+            p_rel = p.get("released_at")
+            if p_name and p_rel:
+                platform_release_dates[p_name] = p_rel
+
     return {
         "rawg_id": item.get("id"),
         "title": item.get("name", "Unknown Title"),
@@ -264,6 +276,7 @@ def format_rawg_game_summary(item: Dict[str, Any]) -> Dict[str, Any]:
         "cover_url": item.get("background_image") or "",
         "background_url": item.get("background_image") or "",
         "release_date": item.get("released") or "",
+        "platform_release_dates": platform_release_dates,
         "rawg_rating": float(item.get("rating") or 0.0),
         "metacritic": int(item.get("metacritic") or 0),
         "genres": russian_genres,
@@ -438,13 +451,24 @@ def enrich_single_game(game_id: int) -> Dict[str, Any]:
     if not details:
         details = best_item
 
+    # Determine platform-appropriate release date
+    platform_name = game.get("platform", "")
+    plat_dates = details.get("platform_release_dates") or best_item.get("platform_release_dates") or {}
+    matched_plat_date = None
+    for p_key, p_val in plat_dates.items():
+        if platform_name and platform_name.lower() in p_key.lower():
+            matched_plat_date = p_val
+            break
+
+    final_release_date = matched_plat_date or details.get("release_date") or details.get("released") or game.get("release_date") or ""
+
     updates = {
         "rawg_id": details.get("rawg_id") or best_item.get("rawg_id"),
         "slug": details.get("slug") or best_item.get("slug", ""),
         "cover_url": details.get("cover_url") or details.get("background_image") or "",
         "background_url": details.get("background_url") or details.get("background_image") or "",
         "genres": details.get("genres") or best_item.get("genres") or game.get("genres") or "Экшен",
-        "release_date": details.get("release_date") or details.get("released") or game.get("release_date") or "",
+        "release_date": final_release_date,
         "developer": details.get("developer") or game.get("developer") or "",
         "publisher": details.get("publisher") or game.get("publisher") or "",
         "rawg_rating": float(details.get("rawg_rating") or details.get("rating") or game.get("rawg_rating") or 0.0),
@@ -457,6 +481,7 @@ def enrich_single_game(game_id: int) -> Dict[str, Any]:
         hltb_time = get_hltb_playtime(game_title)
         if hltb_time is not None and hltb_time > 0:
             updates["playtime_main"] = hltb_time
+            updates["playtime_source"] = "hltb"
 
     updated_game = update_game(game_id, updates)
     return {

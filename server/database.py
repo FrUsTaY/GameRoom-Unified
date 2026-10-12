@@ -57,6 +57,7 @@ def init_db():
         rawg_rating REAL DEFAULT 0.0,
         metacritic INTEGER DEFAULT 0,
         playtime_main REAL DEFAULT 0.0,
+        playtime_source TEXT DEFAULT 'legacy',
         playtime_extra REAL DEFAULT 0.0,
         playtime_completionist REAL DEFAULT 0.0,
         user_playtime_minutes INTEGER DEFAULT 0,
@@ -101,6 +102,12 @@ def init_db():
             cursor.execute("ALTER TABLE games ADD COLUMN client_created_at TEXT DEFAULT ''")
         except Exception:
             pass
+    if "playtime_source" not in columns:
+        try:
+            cursor.execute("ALTER TABLE games ADD COLUMN playtime_source TEXT DEFAULT 'legacy'")
+            cursor.execute("UPDATE games SET playtime_source = 'legacy' WHERE playtime_source IS NULL")
+        except Exception as e:
+            print(f"Migration error for playtime_source: {e}")
 
     # Ensure index on uuid and updated_at
     cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_games_uuid ON games(uuid) WHERE uuid IS NOT NULL AND uuid != ''")
@@ -582,11 +589,11 @@ def create_game(game_data: Dict[str, Any]) -> Dict[str, Any]:
     INSERT INTO games (
         uuid, title, slug, rawg_id, cover_url, background_url, status,
         platform, platforms_list, genres, release_date, developer,
-        publisher, rawg_rating, metacritic, playtime_main, playtime_extra,
+        publisher, rawg_rating, metacritic, playtime_main, playtime_source, playtime_extra,
         playtime_completionist, user_playtime_minutes, rating_grade, user_score,
         user_review, notes, is_favorite, priority, created_at,
         started_at, completed_at, last_played_at, updated_at, updated_by, client_created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         game_uuid,
         game_data.get("title", "Untitled Game"),
@@ -604,6 +611,7 @@ def create_game(game_data: Dict[str, Any]) -> Dict[str, Any]:
         game_data.get("rawg_rating", 0.0),
         game_data.get("metacritic", 0),
         game_data.get("playtime_main", 0.0),
+        game_data.get("playtime_source", "legacy"),
         game_data.get("playtime_extra", 0.0),
         game_data.get("playtime_completionist", 0.0),
         game_data.get("user_playtime_minutes", 0),
@@ -1291,13 +1299,13 @@ def import_full_database_json(data: Dict[str, Any]) -> Dict[str, Any]:
         INSERT OR REPLACE INTO games (
             id, title, slug, rawg_id, cover_url, background_url, status,
             platform, platforms_list, genres, release_date, developer,
-            publisher, rawg_rating, metacritic, playtime_main, playtime_extra,
+            publisher, rawg_rating, metacritic, playtime_main, playtime_source, playtime_extra,
             playtime_completionist, user_playtime_minutes, rating_grade, user_score,
             user_review, notes, is_favorite, priority, created_at,
             started_at, completed_at, last_played_at,
             uuid, updated_at, updated_by, client_created_at
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''', (
             g.get("id"), g.get("title", ""), g.get("slug", ""), g.get("rawg_id"),
@@ -1305,6 +1313,7 @@ def import_full_database_json(data: Dict[str, Any]) -> Dict[str, Any]:
             g.get("platform", "PC"), platforms_list_json, g.get("genres", ""),
             g.get("release_date", ""), g.get("developer", ""), g.get("publisher", ""),
             g.get("rawg_rating", 0.0), g.get("metacritic", 0), g.get("playtime_main", 0.0),
+            g.get("playtime_source", "legacy"),
             g.get("playtime_extra", 0.0), g.get("playtime_completionist", 0.0),
             g.get("user_playtime_minutes", 0), g.get("rating_grade", ""), g.get("user_score", 0),
             g.get("user_review", ""), g.get("notes", ""), g.get("is_favorite", 0), g.get("priority", "medium"),
