@@ -248,6 +248,18 @@ def get_backlog_stats():
 def search_rawg(query: str = Query(..., description="Query for RAWG game search")):
     return rawg.search_games(query)
 
+@app.get("/api/rawg/calendar", dependencies=[Depends(verify_auth)])
+def get_rawg_calendar(
+    start_date: str = Query(..., description="Start date in YYYY-MM-DD"),
+    end_date: str = Query(..., description="End date in YYYY-MM-DD"),
+    platforms: Optional[str] = Query(None, description="Comma separated platform IDs")
+):
+    return rawg.get_releases_calendar(start_date=start_date, end_date=end_date, platforms=platforms)
+
+@app.get("/api/rawg/game/{game_id_or_slug}/movies", dependencies=[Depends(verify_auth)])
+def get_rawg_movies(game_id_or_slug: str):
+    return rawg.get_game_movies(game_id_or_slug)
+
 @app.get("/api/hltb/time", dependencies=[Depends(verify_auth)])
 def get_hltb_time(title: str = Query(..., description="Game title to search on HLTB")):
     from hltb_service import get_hltb_playtime
