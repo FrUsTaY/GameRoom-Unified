@@ -303,6 +303,72 @@ def format_rawg_game_details(item: Dict[str, Any]) -> Dict[str, Any]:
     
     return summary
 
+def get_releases_calendar(start_date: str, end_date: str, platforms: Optional[str] = None, page_size: int = 40) -> Dict[str, Any]:
+    api_key = get_rawg_key()
+    if not api_key:
+        return {
+            "success": False,
+            "requires_api_key": True,
+            "message": "RAWG API Key не указан в Настройках.",
+            "results": []
+        }
+
+    try:
+        url = f"{RAWG_BASE_URL}/games"
+        params = {
+            "key": api_key,
+            "dates": f"{start_date},{end_date}",
+            "ordering": "released", # Show closest releases first
+            "page_size": page_size
+        }
+        if platforms:
+            params["platforms"] = platforms
+
+        logger.info(f"Fetching RAWG calendar with params: {params}")
+        response = requests.get(url, params=params, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get("results", [])
+            formatted = [format_rawg_game_summary(item) for item in results]
+            return {
+                "success": True,
+                "count": data.get("count", len(formatted)),
+                "results": formatted
+            }
+        else:
+            return {"success": False, "error": f"RAWG API error {response.status_code}: {response.text}"}
+    except Exception as e:
+        logger.error(f"Error fetching RAWG calendar: {str(e)}")
+        return {"success": False, "error": f"Internal error: {str(e)}"}
+
+def get_game_movies(game_id_or_slug: str) -> Dict[str, Any]:
+    api_key = get_rawg_key()
+    if not api_key:
+        return {
+            "success": False,
+            "requires_api_key": True,
+            "message": "RAWG API Key не указан в Настройках.",
+            "results": []
+        }
+
+    try:
+        url = f"{RAWG_BASE_URL}/games/{game_id_or_slug}/movies"
+        params = {"key": api_key}
+        response = requests.get(url, params=params, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "success": True,
+                "results": data.get("results", [])
+            }
+        else:
+            return {"success": False, "error": f"RAWG API error {response.status_code}: {response.text}"}
+    except Exception as e:
+        logger.error(f"Error fetching RAWG movies: {str(e)}")
+        return {"success": False, "error": f"Internal error: {str(e)}"}
+
 def get_sample_rawg_search(query: str) -> List[Dict[str, Any]]:
     samples = [
         {

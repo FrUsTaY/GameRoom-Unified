@@ -484,6 +484,7 @@ const app = {
     if (tabName === 'cloud-sync') this.loadYandexStatusAndBackups();
     if (tabName === 'stats') this.renderStatsView();
     if (tabName === 'ai-assistant') this.renderChatMessages();
+    if (tabName === 'releases-calendar') this.loadReleasesCalendar();
   },
 
   // --- DATA FETCHING ---
@@ -498,6 +499,10 @@ const app = {
 
       this.updateBadges();
       this.switchTab(this.currentTab);
+
+      if (this.currentTab === 'releases-calendar' && this.currentCalendarData) {
+          this.renderReleasesCalendar();
+      }
     } catch (e) {
       console.error('Error fetching games:', e);
     }
@@ -980,6 +985,131 @@ const app = {
   },
 
   // --- RAWG STREAMLINED SEARCH & 1-CLICK ADD TOOL ---
+  async loadReleasesCalendar() {
+    const grid = document.getElementById('calendar-results-grid');
+    const msg = document.getElementById('calendar-status-message');
+    const platformFilter = document.getElementById('calendar-platform-filter')?.value || 'all';
+
+    if (!grid) return;
+
+    grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--sv-cyan);">📅 Загрузка календаря релизов...</div>`;
+
+    const now = new Date();
+    const startDate = now.toISOString().split('T')[0];
+    const future = new Date();
+    future.setDate(future.getDate() + 30);
+    const endDate = future.toISOString().split('T')[0];
+
+    try {
+      let url = `/api/rawg/calendar?start_date=${startDate}&end_date=${endDate}`;
+      if (platformFilter !== 'all') {
+        url += `&platforms=${platformFilter}`;
+      }
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (msg) {
+        if (data.requires_api_key) {
+          msg.innerHTML = `<div style="background:rgba(255,230,0,0.15); border:1px solid var(--sv-yellow); color:var(--sv-yellow); padding:10px 16px; clip-path:var(--clip-cut-corner); font-size:0.85rem;">⚠️ ${data.message}</div>`;
+        } else if (!data.success && data.error) {
+          msg.innerHTML = `<div style="background:rgba(255,34,71,0.15); border:1px solid var(--sv-red); color:var(--sv-red); padding:10px 16px; clip-path:var(--clip-cut-corner); font-size:0.85rem;">❌ ${data.error}</div>`;
+        } else {
+          msg.innerHTML = `<div style="color:var(--sv-green); font-size:0.85rem; font-weight:700;">✅ Найдено релизов: ${data.count || (data.results || []).length}</div>`;
+        }
+      }
+
+      this.currentCalendarData = data.results || [];
+      this.renderReleasesCalendar();
+    } catch (e) {
+      grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--sv-red);">Ошибка загрузки календаря: ${e.message}</div>`;
+    }
+  },
+
+  renderReleasesCalendar() {
+    const grid = document.getElementById('calendar-results-grid');
+    if (!grid) return;
+
+    if (!this.currentCalendarData || this.currentCalendarData.length === 0) {
+        grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--sv-text-muted);">Ничего не найдено.</div>`;
+        return;
+    }
+
+    const libFilter = document.getElementById('calendar-library-filter')?.value || 'all';
+
+    let displayItems = [];
+
+    this.currentCalendarData.forEach(item => {
+      // Find if game exists in our library
+      let gameInLibrary = this.games.find(g => g.rawg_id === item.rawg_id || g.title.toLowerCase() === item.title.toLowerCase());
+
+      let include = true;
+      if (libFilter === 'in_library' && !gameInLibrary) include = false;
+      if (libFilter === 'not_in_library' && gameInLibrary) include = false;
+      if (libFilter === 'wishlist' && (!gameInLibrary || gameInLibrary.status !== 'wishlist')) include = false;
+
+      if (include) {
+        displayItems.push({ item, gameInLibrary });
+      }
+    });
+
+    if (displayItems.length === 0) {
+      grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--sv-text-muted);">Ничего не найдено по текущим фильтрам.</div>`;
+      return;
+    }
+
+    grid.innerHTML = displayItems.map(({ item, gameInLibrary }) => {
+      const itemJson = encodeURIComponent(JSON.stringify(item));
+
+      let actionButtons = '';
+      if (gameInLibrary) {
+        actionButtons = `
+          <div style="margin-top: 10px; display:flex; flex-direction:column; gap:4px;">
+            <div style="color:var(--sv-cyan); font-size:0.8rem; text-align:center;">Уже в библиотеке</div>
+            <select class="sv-select" onchange="app.changeStatus(${gameInLibrary.id}, this.value)" style="font-size:0.78rem; padding:4px 8px;">
+              <option value="playing" ${gameInLibrary.status === 'playing' ? 'selected' : ''}>⚡ Играю</option>
+              <option value="backlog" ${gameInLibrary.status === 'backlog' ? 'selected' : ''}>📚 В бэклог</option>
+              <option value="wishlist" ${gameInLibrary.status === 'wishlist' ? 'selected' : ''}>⭐ Вишлист</option>
+              <option value="paused" ${gameInLibrary.status === 'paused' ? 'selected' : ''}>⏸️ На паузу</option>
+              <option value="dropped" ${gameInLibrary.status === 'dropped' ? 'selected' : ''}>❌ Дропнуть</option>
+              <option value="completed" ${gameInLibrary.status === 'completed' ? 'selected' : ''}>🏆 Пройдено</option>
+            </select>
+            <button class="sv-btn sv-btn-outline sv-btn-sm" style="margin-top:4px;" onclick="app.openTrailerModal(null, '${this.escapeJs(item.title)}', '${this.escapeJs(item.cover_url || '')}', '${this.escapeJs(item.platform || '')}', '${this.escapeJs(item.genres || '')}', '${this.escapeJs(item.slug || '')}')" title="Смотреть трейлер">🎬 Трейлер</button>
+          </div>
+        `;
+      } else {
+        actionButtons = `
+          <div style="margin-top: 10px; display: flex; gap: 4px; flex-wrap: wrap;">
+            <button class="sv-btn sv-btn-cyan sv-btn-sm" style="flex:1;" onclick="app.quickAddFromRawg(${item.rawg_id}, '${itemJson}', 'backlog', true)">📚 В бэклог</button>
+            <button class="sv-btn sv-btn-primary sv-btn-sm" style="flex:1;" onclick="app.quickAddFromRawg(${item.rawg_id}, '${itemJson}', 'playing', true)">⚡ Играть</button>
+            <button class="sv-btn sv-btn-yellow sv-btn-sm" style="flex:1;" onclick="app.quickAddFromRawg(${item.rawg_id}, '${itemJson}', 'wishlist', true)">⭐ В вишлист</button>
+            <button class="sv-btn sv-btn-outline sv-btn-sm" onclick="app.openTrailerModal(null, '${this.escapeJs(item.title)}', '${this.escapeJs(item.cover_url || '')}', '${this.escapeJs(item.platform || '')}', '${this.escapeJs(item.genres || '')}', '${this.escapeJs(item.slug || '')}')" title="Смотреть трейлер">🎬</button>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="game-card">
+          <div class="card-poster" style="background-image: url('${item.cover_url || ''}')">
+            <div class="card-top-bar">
+              <div class="card-badges">
+                <span class="comic-badge badge-platform">${item.platform || 'PC'}</span>
+              </div>
+            </div>
+          </div>
+          <div class="card-content">
+            <h3 class="card-title">${this.escapeHtml(item.title)}</h3>
+            <div class="card-meta">
+              <span>📅 ${item.release_date || 'Неизвестно'}</span>
+            </div>
+            <div class="card-genres">${item.genres || 'Экшен'}</div>
+            ${actionButtons}
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
   async performRawgSearch(query) {
     if (!query || !query.trim()) return;
     const grid = document.getElementById('rawg-results-grid');

@@ -55,6 +55,9 @@
       </a>
 
       <div class="nav-section-title">Инструменты & AI</div>
+      <a class="nav-item" data-tab="releases-calendar">
+        <span>📅</span> Календарь релизов
+      </a>
       <a class="nav-item" data-tab="rawg-search">
         <span>🔍</span> RAWG.io Инструмент
       </a>
@@ -267,6 +270,35 @@
           </div>
         </div>
         <div class="games-grid" id="paused-grid">
+          <!-- Rendered via JS -->
+        </div>
+      </section>
+
+      <!-- TAB: RELEASES CALENDAR -->
+      <section class="tab-pane" id="tab-releases-calendar">
+        <div class="filter-bar">
+          <div class="filter-group">
+            <select class="sv-select" id="calendar-platform-filter">
+              <option value="all">Все платформы</option>
+              <option value="4">PC (Windows)</option>
+              <option value="18,187,16">PlayStation</option>
+              <option value="1,186,14">Xbox</option>
+              <option value="7">Nintendo Switch</option>
+              <option value="51,212">Oculus / Meta Quest</option>
+            </select>
+            <select class="sv-select" id="calendar-library-filter">
+              <option value="all">Все игры</option>
+              <option value="in_library">Уже в библиотеке</option>
+              <option value="not_in_library">Не добавлены</option>
+              <option value="wishlist">Хочу пройти (Вишлист)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <button class="sv-btn sv-btn-primary" id="btn-refresh-calendar">🔄 Обновить</button>
+          </div>
+        </div>
+        <div id="calendar-status-message" style="margin-bottom: 20px;"></div>
+        <div class="games-grid" id="calendar-results-grid">
           <!-- Rendered via JS -->
         </div>
       </section>
