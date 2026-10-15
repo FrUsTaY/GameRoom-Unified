@@ -1178,7 +1178,7 @@ const app = {
     }
   },
 
-  async quickAddFromRawg(rawgId, encodedJson, targetStatus) {
+  async quickAddFromRawg(rawgId, encodedJson, targetStatus, returnToCalendar = false) {
     try {
       const item = JSON.parse(decodeURIComponent(encodedJson));
       const res = await fetch('/api/rawg/quick-add', {
@@ -1194,7 +1194,11 @@ const app = {
       if (data.success) {
         this.showToast(`«${item.title}» добавлена в раздел «${this.formatStatus(targetStatus)}»!`, 'success');
         await this.refreshAllData();
-        this.switchTab(targetStatus);
+        if (returnToCalendar) {
+           this.renderReleasesCalendar();
+        } else {
+           this.switchTab(targetStatus);
+        }
       } else {
         this.showAlert(data.error || 'Не удалось добавить игру', 'ОШИБКА ДОБАВЛЕНИЯ', 'error');
       }
