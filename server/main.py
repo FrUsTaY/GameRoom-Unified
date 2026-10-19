@@ -318,6 +318,30 @@ def quick_add_rawg(req: QuickAddRawgRequest):
         game_data=req.game_data
     )
 
+@app.get("/api/rawg/releases-calendar/{year_month}", dependencies=[Depends(verify_auth)])
+def rawg_releases_calendar(year_month: str):
+    """
+    Release Calendar data source (Календарь релизов).
+    Accepts ГГГГ-ММ (e.g. 2026-10) and returns all RAWG releases for that month.
+    Uses the existing RAWG client, API key and error-handling architecture.
+    """
+    parts = year_month.strip().split("-")
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="Некорректный формат месяца. Ожидается ГГГГ-ММ.")
+    try:
+        year = int(parts[0])
+        month = int(parts[1])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректный формат месяца. Ожидается ГГГГ-ММ.")
+    if month < 1 or month > 12 or year < 1970:
+        raise HTTPException(status_code=400, detail="Недопустимое значение года или месяца.")
+    return rawg.get_releases_calendar(year, month)
+
+@app.get("/api/rawg/movies/{rawg_id}", dependencies=[Depends(verify_auth)])
+def rawg_game_movies(rawg_id: int):
+    """Supplementary trailer source (/games/{id}/movies) for the shared trailer modal."""
+    return rawg.get_game_movies(rawg_id)
+
 @app.get("/api/rawg/missing-count", dependencies=[Depends(verify_auth)])
 def rawg_missing_count(status: Optional[str] = Query(None)):
     games = db.get_games(status=status)
@@ -633,7 +657,11 @@ def serve_manifest():
 def serve_sw():
     p = os.path.join(static_dir, "sw.js")
     if os.path.exists(p):
-        return FileResponse(p, media_type="application/javascript")
+        # no-cache (not no-store): browser must revalidate the SW script on
+        # every navigation/update check, but may use 304 for bandwidth.
+        # This is what makes normal page refreshes pick up a new SW version.
+        return FileResponse(p, media_type="application/javascript",
+                            headers={"Cache-Control": "no-cache, max-age=0"})
     raise HTTPException(status_code=404, detail="sw.js not found")
 
 @app.get("/favicon.ico")

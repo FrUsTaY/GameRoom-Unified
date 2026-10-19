@@ -1,10 +1,14 @@
 """
 RAWG.io API Integration Service
 Provides instant game search, automated metadata auto-fetch, cover arts,
-Russian genre translation, and playtime estimation for seamless 1-click backlog additions.
+Russian genre translation, release calendar dates, and playtime estimation
+for seamless 1-click backlog additions.
 """
+import os
+import time
 import requests
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from database import get_setting, create_game
 from hltb_service import get_hltb_playtime
@@ -154,6 +158,25 @@ def get_game_details(game_id_or_slug: str) -> Dict[str, Any]:
         logger.error(f"Error fetching game details from RAWG: {e}")
         return {"success": False, "error": str(e)}
 
+def find_existing_game_for_rawg(rawg_id: Optional[int], title: str = "", slug: str = "") -> Optional[Dict[str, Any]]:
+    """
+    Duplicate protection for 1-click adds (RAWG tool + Release Calendar):
+    matches an existing library game by RAWG id first, then by normalized title / slug.
+    """
+    from database import get_games
+    all_games = get_games()
+    norm_title = (title or "").strip().lower()
+    norm_slug = (slug or "").strip().lower()
+    for g in all_games:
+        if rawg_id and g.get("rawg_id") and int(g["rawg_id"]) == int(rawg_id):
+            return g
+        if norm_slug and (g.get("slug") or "").strip().lower() == norm_slug:
+            return g
+        if norm_title and (g.get("title") or "").strip().lower() == norm_title:
+            return g
+    return None
+
+
 def quick_add_game(rawg_id: Optional[int], target_status: str = "backlog", game_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     details = None
     if rawg_id:
@@ -166,6 +189,30 @@ def quick_add_game(rawg_id: Optional[int], target_status: str = "backlog", game_
 
     if not details:
         return {"success": False, "error": "Не удалось получить метаданные игры для добавления."}
+
+    # --- Duplicate protection: never create a second record for the same RAWG game ---
+    probe_title = details.get("title") or (game_data or {}).get("title") or ""
+    probe_slug = details.get("slug") or (game_data or {}).get("slug") or ""
+    existing = find_existing_game_for_rawg(rawg_id or (game_data or {}).get("rawg_id"),
+                                           title=probe_title, slug=probe_slug)
+    if existing:
+        updates = {}
+        if rawg_id and not existing.get("rawg_id"):
+            updates["rawg_id"] = rawg_id
+        if not existing.get("cover_url") and details.get("cover_url"):
+            updates["cover_url"] = details.get("cover_url")
+            updates["background_url"] = details.get("background_url") or details.get("cover_url")
+        if updates:
+            from database import update_game
+            updated = update_game(existing["id"], updates) or existing
+        else:
+            updated = existing
+        return {
+            "success": True,
+            "duplicate": True,
+            "game": updated,
+            "message": f"«{updated.get('title')}» уже есть в библиотеке (статус: {updated.get('status')})."
+        }
 
     title_for_hltb = details.get("title") or details.get("name") or "Новая игра"
     hltb_time = get_hltb_playtime(title_for_hltb)
@@ -530,3 +577,257 @@ def bulk_enrich_missing_games(status: Optional[str] = None, batch_size: int = 25
         "has_more": remaining_count > 0,
         "errors": errors
     }
+
+
+# ============================================================================
+# RELEASE CALENDAR (Календарь релизов) — RAWG dates endpoint integration
+# ============================================================================
+
+CALENDAR_PLATFORM_FAMILIES = {
+    "pc": ["PC"],
+    "playstation": ["PlayStation 5", "PlayStation 4", "Sony Entertainment Console",
+                    "PlayStation 3", "PlayStation VR2", "PSVR"],
+    "xbox": ["Xbox Series S/X", "Xbox One", "Xbox 360", "Xbox Cloud Gaming"],
+    "nintendo": ["Nintendo Switch", "Nintendo Switch 2", "Nintendo", "Game Boy",
+                 "NES", "SNES", "Nintendo 3DS", "Nintendo DS", "WiiU", "Wii"],
+}
+
+_RAWG_PLATFORM_ID_FAMILIES = {
+    1: "pc", 4: "pc",                                    # PC, Software (TBD)
+    18: "playstation", 9: "playstation", 7: "playstation",
+    16: "playstation", 15: "playstation", 19: "playstation",
+    14: "xbox", 80: "xbox", 12: "xbox", 3: "xbox", 28: "xbox",
+    13: "nintendo", 6: "nintendo", 5: "nintendo", 43: "nintendo",
+    94: "nintendo", 48: "nintendo", 46: "nintendo", 26: "nintendo",
+    49: "nintendo", 51: "nintendo", 53: "nintendo",
+}
+
+_calendar_cache: Dict[str, Any] = {"key": None, "ts": 0.0}
+CALENDAR_CACHE_TTL_SECONDS = 6 * 3600  # calendar month data is static; cache 6h
+
+def _get_rawg_key_preferred() -> str:
+    """Settings DB key first (existing architecture), env fallback for fresh installs."""
+    key = get_rawg_key()
+    if not key:
+        key = os.environ.get("RAWG_API_KEY", "").strip()
+    return key
+
+
+def get_platform_family_for_name(name: Optional[str]) -> List[str]:
+    """Maps a RAWG platform name to one of the calendar families: pc/playstation/xbox/nintendo."""
+    if not name:
+        return []
+    p = name.strip().lower()
+    if p in ("pc", "software (tbd)"):
+        return ["pc"]
+    if any(t in p for t in ["playstation", "ps5", "ps4", "ps3", "sony entertainment console", "psvr"]):
+        return ["playstation"]
+    if "xbox" in p:
+        return ["xbox"]
+    if any(t in p for t in ["nintendo", "switch", "game boy", "nes", "snes", "wii", "3ds", "ds"]):
+        return ["nintendo"]
+    return []
+
+
+def _format_release_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalizes a RAWG date-list game entry into a compact calendar card payload."""
+    genres_items = item.get("genres") or []
+    raw_genres = [g.get("name") for g in genres_items if isinstance(g, dict) and g.get("name")]
+    tags_items = item.get("tags") or []
+    for t in tags_items:
+        if isinstance(t, dict) and t.get("name"):
+            t_low = t["name"].lower()
+            if any(w in t_low for w in ["story rich", "horror", "stealth", "survival",
+                                        "open world", "sci-fi", "cyberpunk", "souls",
+                                        "roguelike", "metroidvania"]) and t["name"] not in raw_genres:
+                raw_genres.append(t["name"])
+
+    platforms_items = item.get("platforms") or []
+    platforms_list: List[str] = []
+    families: List[str] = []
+    for p in platforms_items:
+        if not isinstance(p, dict):
+            continue
+        pdata = p.get("platform") or {}
+        pid = pdata.get("id")
+        pname = pdata.get("name") or ""
+        fams = get_platform_family_for_name(pname)
+        if not fams and pid in _RAWG_PLATFORM_ID_FAMILIES:
+            fams = [_RAWG_PLATFORM_ID_FAMILIES[pid]]
+        for f in fams:
+            if f not in families:
+                families.append(f)
+        if pname and pname not in platforms_list:
+            platforms_list.append(pname)
+
+    primary_platform = "PC"
+    for pref in ["PC", "PlayStation 5", "Xbox Series S/X", "Nintendo Switch"]:
+        if pref in platforms_list:
+            primary_platform = pref
+            break
+    else:
+        if platforms_list:
+            primary_platform = platforms_list[0]
+
+    added_by_status = item.get("added_by_status") or {}
+    added_by_user = (added_by_status.get("by") or {}).get("username") or ""
+
+    stores_items = item.get("stores") or []
+    store_urls = [s.get("store", {}).get("url") for s in stores_items
+                  if isinstance(s, dict) and isinstance(s.get("store"), dict) and s.get("store", {}).get("url")]
+
+    return {
+        "rawg_id": item.get("id"),
+        "title": item.get("name", "Unknown Title"),
+        "slug": item.get("slug", ""),
+        "cover_url": item.get("background_image") or "",
+        "background_url": item.get("background_image") or "",
+        "release_date": item.get("released") or "",
+        "tba": bool(item.get("tba")),
+        "rawg_rating": float(item.get("rating") or 0.0),
+        "metacritic": int(item.get("metacritic") or 0),
+        "genres": translate_genres(raw_genres) if raw_genres else "",
+        "platforms_list": platforms_list if platforms_list else ["PC"],
+        "platform_families": families,
+        "platform": primary_platform,
+        "added_by": added_by_user,
+        "store_url": store_urls[0] if store_urls else "",
+    }
+
+
+def get_releases_calendar(year: int, month: int) -> Dict[str, Any]:
+    """
+    Fetches all game releases for a given month from RAWG `/games` with
+    `dates` filter (same client, same key, same error-handling style).
+    Results are deduplicated by RAWG id and cached server-side.
+    """
+    api_key = _get_rawg_key_preferred()
+    if not api_key:
+        return {
+            "success": False,
+            "requires_api_key": True,
+            "message": "RAWG API Key не настроен. Укажите ключ в разделе «Настройки API» для работы календаря релизов.",
+            "results": []
+        }
+
+    try:
+        year = int(year)
+        month = int(month)
+    except (TypeError, ValueError):
+        return {"success": False, "error": "Некорректный формат месяца. Ожидается ГГГГ-ММ.", "results": []}
+    if year < 1970 or month < 1 or month > 12:
+        return {"success": False, "error": "Недопустимое значение года или месяца.", "results": []}
+
+    cache_key = f"{year}-{month:02d}"
+    now_ts = time.time()
+    if _calendar_cache.get("key") == cache_key and (now_ts - _calendar_cache.get("ts", 0)) < CALENDAR_CACHE_TTL_SECONDS:
+        return {"success": True, "cached": True, "year": year, "month": month,
+                "count": len(_calendar_cache["results"]), "results": _calendar_cache["results"]}
+
+    last_day = 31
+    while True:  # clamp end day for months with fewer days
+        try:
+            datetime(year, month, last_day)
+            break
+        except ValueError:
+            last_day -= 1
+
+    start_iso = f"{year}-{month:02d}-01"
+    end_iso = f"{year}-{month:02d}-{last_day:02d}"
+
+    results: List[Dict[str, Any]] = []
+    seen_ids = set()
+    page = 1
+    max_pages = 6  # up to ~360 releases per month (page_size 60)
+    errors_seen = []
+
+    try:
+        while page <= max_pages:
+            url = f"{RAWG_BASE_URL}/games"
+            params = {
+                "key": api_key,
+                "ordering": "release_date",
+                "dates": f"{start_iso},{end_iso}",
+                "page": page,
+                "page_size": 60,
+                "no_screenshots": "",
+                "no_games": "",
+            }
+            response = requests.get(url, params=params, timeout=15)
+            if response.status_code in (401, 403):
+                return {"success": False, "error": "Неверный или недействительный RAWG API Key.", "results": []}
+            if response.status_code != 200:
+                err = f"Ошибка RAWG API (HTTP {response.status_code})"
+                if page == 1:
+                    return {"success": False, "error": err, "results": []}
+                errors_seen.append(err)
+                break
+            data = response.json()
+            raw_results = data.get("results") or []
+            for item in raw_results:
+                if not isinstance(item, dict):
+                    continue
+                rid = item.get("id")
+                if rid in seen_ids:
+                    continue
+                seen_ids.add(rid)
+                results.append(_format_release_item(item))
+            next_url = data.get("next")
+            if not next_url or not raw_results:
+                break
+            page += 1
+    except Exception as e:
+        logger.error(f"Error fetching RAWG release calendar: {e}")
+        if page == 1:
+            return {"success": False, "error": f"Ошибка сети при запросе к RAWG: {str(e)}", "results": []}
+
+    results.sort(key=lambda r: (r.get("release_date") or "9999-12-31", -(r.get("rawg_rating") or 0)))
+
+    _calendar_cache["key"] = cache_key
+    _calendar_cache["ts"] = now_ts
+    _calendar_cache["results"] = results
+
+    return {
+        "success": True,
+        "cached": False,
+        "year": year,
+        "month": month,
+        "range": {"start": start_iso, "end": end_iso},
+        "count": len(results),
+        "results": results,
+        "partial_error": errors_seen[0] if errors_seen else None,
+    }
+
+
+def get_game_movies(rawg_id: int) -> Dict[str, Any]:
+    """
+    RAWG `/games/{id}/movies` endpoint — optional supplementary trailer source.
+    Returns normalized [{name, video_id, embed_url, watch_url}] list so the frontend
+    can reuse the existing single trailer modal / iframe player.
+    """
+    api_key = _get_rawg_key_preferred()
+    if not api_key:
+        return {"success": False, "requires_api_key": True, "message": "RAWG API Key не настроен.", "movies": []}
+    try:
+        url = f"{RAWG_BASE_URL}/games/{rawg_id}/movies"
+        response = requests.get(url, params={"key": api_key}, timeout=10)
+        if response.status_code != 200:
+            return {"success": False, "error": f"Ошибка RAWG API (HTTP {response.status_code})", "movies": []}
+        movies = []
+        for m in (response.json().get("results") or []):
+            if not isinstance(m, dict):
+                continue
+            data = m.get("data") or {}
+            video_id = data.get("480") or data.get("max") or data.get("720") or ""
+            if not video_id:
+                continue
+            movies.append({
+                "name": m.get("name") or "Трейлер",
+                "video_id": video_id,
+                "embed_url": f"https://www.youtube.com/embed/{video_id}?autoplay=1&rel=0",
+                "watch_url": f"https://www.youtube.com/watch?v={video_id}",
+            })
+        return {"success": True, "movies": movies}
+    except Exception as e:
+        logger.error(f"Error fetching RAWG movies for {rawg_id}: {e}")
+        return {"success": False, "error": str(e), "movies": []}
