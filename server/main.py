@@ -657,7 +657,11 @@ def serve_manifest():
 def serve_sw():
     p = os.path.join(static_dir, "sw.js")
     if os.path.exists(p):
-        return FileResponse(p, media_type="application/javascript")
+        # no-cache (not no-store): browser must revalidate the SW script on
+        # every navigation/update check, but may use 304 for bandwidth.
+        # This is what makes normal page refreshes pick up a new SW version.
+        return FileResponse(p, media_type="application/javascript",
+                            headers={"Cache-Control": "no-cache, max-age=0"})
     raise HTTPException(status_code=404, detail="sw.js not found")
 
 @app.get("/favicon.ico")

@@ -133,7 +133,24 @@ const app = {
   initPwa() {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(e => console.log('SW registration error:', e));
+        // Register the SW under a versioned URL. The query string is part of
+        // the registration scope key, so bumping ?v= on deploy makes the
+        // browser install the new worker immediately on the next normal page
+        // load (no Ctrl+F5 needed). The old registration is unregistered.
+        const swUrl = '/sw.js?v=9';
+        navigator.serviceWorker.getRegistration('/sw.js').then(oldReg => {
+          return navigator.serviceWorker.register(swUrl)
+            .then(reg => { if (oldReg) oldReg.unregister(); return reg; });
+        }).catch(e => console.log('SW registration error:', e));
+
+        // When a newer worker activates while this page is open, reload once
+        // so the user always ends up on the freshly deployed shell.
+        let reloadedBySwUpdate = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (reloadedBySwUpdate) return;
+          reloadedBySwUpdate = true;
+          window.location.reload();
+        });
       });
     }
 
