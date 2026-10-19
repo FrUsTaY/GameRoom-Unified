@@ -13,9 +13,10 @@ import unittest
 import uuid
 from datetime import datetime, timezone, timedelta
 
-app_dir = os.path.dirname(os.path.abspath(__file__))
-if app_dir not in sys.path:
-    sys.path.insert(0, app_dir)
+server_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "server"))
+app_dir = server_dir
+if server_dir not in sys.path:
+    sys.path.insert(0, server_dir)
 
 import database as db
 import sync_service

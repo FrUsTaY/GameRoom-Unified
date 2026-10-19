@@ -9,9 +9,10 @@ import os
 import json
 import unittest
 
-app_dir = os.path.dirname(os.path.abspath(__file__))
-if app_dir not in sys.path:
-    sys.path.insert(0, app_dir)
+server_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "server"))
+app_dir = server_dir
+if server_dir not in sys.path:
+    sys.path.insert(0, server_dir)
 
 import database as db
 import rawg_service as rawg

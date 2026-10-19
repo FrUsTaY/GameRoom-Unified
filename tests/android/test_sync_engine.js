@@ -29,7 +29,7 @@ global.fetch = async (url, options) => {
 };
 
 // Load sync.js
-const syncJsPath = path.join(__dirname, 'app', 'src', 'main', 'assets', 'js', 'core', 'sync.js');
+const syncJsPath = path.resolve(__dirname, '..', '..', 'android', 'app', 'src', 'main', 'assets', 'js', 'core', 'sync.js');
 const syncCode = fs.readFileSync(syncJsPath, 'utf8');
 eval(syncCode);
 

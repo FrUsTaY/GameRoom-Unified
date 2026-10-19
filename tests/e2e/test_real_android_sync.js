@@ -55,7 +55,7 @@ function createAndroidClient(clientName = 'android-client-1') {
   };
   sandbox.window = sandbox;
 
-  const syncJsPath = path.join(__dirname, 'android', 'app', 'src', 'main', 'assets', 'js', 'core', 'sync.js');
+  const syncJsPath = path.resolve(__dirname, '..', '..', 'android', 'app', 'src', 'main', 'assets', 'js', 'core', 'sync.js');
   const syncJsCode = fs.readFileSync(syncJsPath, 'utf8');
   vm.createContext(sandbox);
   vm.runInContext(syncJsCode, sandbox);
@@ -210,7 +210,7 @@ async function runTests() {
   const serverElden2 = (await directServerFetch2.json()).games.find(g => g.uuid === newGameUuid);
   assert.strictEqual(serverElden2.status, "completed");
   assert.strictEqual(serverElden2.user_playtime_minutes, 1350); // 22.5h = 1350m
-  assert.strictEqual(serverElden2.notes, "Победил Мессмера!");
+  assert.strictEqual(serverElden2.user_review, "Победил Мессмера!");
   console.log("✔ Android update → Server passed!\n");
 
   // -------------------------------------------------------------
@@ -277,7 +277,7 @@ async function runTests() {
   const currentQueue = engine.getSyncQueue();
   assert.strictEqual(currentQueue.length, 1, "Queue compaction must keep only 1 action for offlineGameUuid");
   assert.strictEqual(currentQueue[0].action, 'create', "Initial create should be kept with merged payload");
-  assert.strictEqual(currentQueue[0].payload.notes, "v3 final", "Payload must contain latest compacted note");
+  assert.strictEqual(currentQueue[0].payload.user_review, "v3 final", "Payload must contain latest compacted note");
   assert.strictEqual(currentQueue[0].payload.user_playtime_minutes, 300, "5.0 hours = 300 minutes");
 
   client1.games.unshift(offGame);
@@ -287,7 +287,7 @@ async function runTests() {
 
   const checkOffGame = (await (await fetch(`${serverUrl}/api/games`)).json()).games.find(g => g.uuid === offlineGameUuid);
   assert.ok(checkOffGame, "Offline game must be created on server");
-  assert.strictEqual(checkOffGame.notes, "v3 final");
+  assert.strictEqual(checkOffGame.user_review, "v3 final");
   assert.strictEqual(checkOffGame.user_playtime_minutes, 300);
 
   const checkTempGame = (await (await fetch(`${serverUrl}/api/games`)).json()).games.find(g => g.uuid === tempGameUuid);
@@ -374,6 +374,8 @@ async function runTests() {
   // Test 9: Conflicting Changes (LWW Resolution)
   // -------------------------------------------------------------
   console.log("▶ [Test 9] Conflicting changes & Last-Write-Wins convergence...");
+  // Allow at least 1.1s so server_modified_since_last_sync threshold (> 1.0s) triggers
+  await new Promise(r => setTimeout(r, 1100));
   // Server updates GTA VI at current time with a winning review
   await fetch(`${serverUrl}/api/games/${serverGta.id}`, {
     method: 'PATCH',

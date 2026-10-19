@@ -40,7 +40,7 @@ def main():
     env["GAME_ROOM_WEB_USERNAME"] = "e2e_admin"
     env["GAME_ROOM_WEB_PASSWORD_HASH"] = test_pass_hash
 
-    server_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server")
+    server_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "server"))
 
     # 2. Launch FastAPI / Uvicorn server subprocess
     cmd = [
