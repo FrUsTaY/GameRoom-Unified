@@ -2792,3 +2792,176 @@ body::after {
     font-size: 0.76rem;
   }
 }
+
+/* ===================== RELEASE CALENDAR (КАЛЕНДАРЬ РЕЛИЗОВ) ===================== */
+.cal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--sv-purple-dark, #2b0a4d);
+  clip-path: var(--clip-cut-corner);
+}
+
+.cal-month-title-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cal-month-title {
+  font-family: var(--font-comic);
+  font-size: 1.5rem;
+  color: #fff;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 var(--sv-red);
+}
+
+.cal-month-sub {
+  font-size: 0.78rem;
+  color: var(--sv-cyan);
+  font-weight: 700;
+}
+
+.cal-filters {
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.cal-filter-label {
+  font-family: var(--font-comic);
+  font-size: 0.8rem;
+  color: var(--sv-yellow);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cal-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cal-chip {
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(0, 240, 255, 0.35);
+  color: var(--sv-text-secondary, #cfd2e8);
+  font-family: var(--font-comic);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  cursor: pointer;
+  clip-path: var(--clip-badge);
+  transition: all 0.15s ease;
+}
+
+.cal-chip:hover {
+  border-color: var(--sv-cyan);
+  color: #fff;
+}
+
+.cal-chip.active {
+  background: var(--sv-cyan);
+  color: #06010f;
+  border-color: var(--sv-cyan);
+  box-shadow: 0 0 12px var(--sv-cyan-glow);
+}
+
+.cal-week-block {
+  margin-bottom: 26px;
+}
+
+.cal-week-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  background: linear-gradient(90deg, rgba(255, 34, 71, 0.18), transparent);
+  border-left: 4px solid var(--sv-red);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+}
+
+.cal-week-label {
+  font-family: var(--font-comic);
+  font-size: 1.05rem;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.cal-week-count {
+  font-size: 0.75rem;
+  color: var(--sv-cyan);
+  font-weight: 700;
+}
+
+.cal-game-card .badge-release-date {
+  background: var(--sv-purple, #7a1fa2);
+  color: #fff;
+  border: 1px solid var(--sv-cyan);
+  font-weight: 700;
+}
+
+.cal-platform-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.cal-add-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.cal-add-select,
+.cal-status-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.78rem !important;
+  padding: 6px 8px !important;
+}
+
+.cal-in-library {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cal-lib-status {
+  display: inline-block;
+  font-family: var(--font-comic);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  clip-path: var(--clip-badge);
+  width: fit-content;
+}
+
+.cal-status-wishlist { background: rgba(255, 230, 0, 0.2); color: var(--sv-yellow); border: 1px solid var(--sv-yellow); }
+.cal-status-playing  { background: rgba(255, 34, 71, 0.2);  color: #ff8fa3;          border: 1px solid var(--sv-red); }
+.cal-status-backlog  { background: rgba(0, 240, 255, 0.15); color: var(--sv-cyan);   border: 1px solid var(--sv-cyan); }
+.cal-status-completed{ background: rgba(34, 197, 94, 0.2);  color: var(--sv-green, #22c55e); border: 1px solid var(--sv-green, #22c55e); }
+.cal-status-paused,
+.cal-status-dropped  { background: rgba(160, 160, 180, 0.2);color: #b9bdd8;           border: 1px solid #8890b5; }
+
+.cal-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--sv-text-muted, #9aa0c3);
+  font-size: 0.95rem;
+  background: rgba(0, 0, 0, 0.25);
+  clip-path: var(--clip-cut-corner);
+}
+
+@media (max-width: 900px) {
+  .cal-header { flex-wrap: wrap; }
+  .cal-month-title { font-size: 1.15rem; }
+  .cal-filters .filter-group { width: 100%; }
+}

@@ -55,6 +55,9 @@
       </a>
 
       <div class="nav-section-title">Инструменты & AI</div>
+      <a class="nav-item" data-tab="release-calendar">
+        <span>📅</span> Календарь релизов
+      </a>
       <a class="nav-item" data-tab="rawg-search">
         <span>🔍</span> RAWG.io Инструмент
       </a>
@@ -268,6 +271,49 @@
         </div>
         <div class="games-grid" id="paused-grid">
           <!-- Rendered via JS -->
+        </div>
+      </section>
+
+      <!-- TAB: RELEASE CALENDAR (КАЛЕНДАРЬ РЕЛИЗОВ) -->
+      <section class="tab-pane" id="tab-release-calendar">
+        <div class="cal-header">
+          <button class="sv-btn sv-btn-outline sv-btn-sm" id="btn-cal-prev" title="Предыдущий месяц">◀</button>
+          <div class="cal-month-title-wrap">
+            <span class="cal-month-title" id="cal-month-title">Октябрь 2026</span>
+            <span class="cal-month-sub" id="cal-month-sub">Загрузка...</span>
+          </div>
+          <button class="sv-btn sv-btn-outline sv-btn-sm" id="btn-cal-next" title="Следующий месяц">▶</button>
+          <button class="sv-btn sv-btn-cyan sv-btn-sm" id="btn-cal-today">Сегодня</button>
+        </div>
+
+        <div class="filter-bar cal-filters">
+          <div class="filter-group">
+            <span class="cal-filter-label">Платформа:</span>
+            <div class="cal-chip-row" id="cal-platform-chips">
+              <button class="cal-chip active" data-family="all">Все</button>
+              <button class="cal-chip" data-family="pc">🖥️ PC</button>
+              <button class="cal-chip" data-family="playstation">🎮 PlayStation</button>
+              <button class="cal-chip" data-family="xbox">🟩 Xbox</button>
+              <button class="cal-chip" data-family="nintendo">🍄 Nintendo Switch</button>
+            </div>
+          </div>
+          <div class="filter-group">
+            <span class="cal-filter-label">Библиотека:</span>
+            <div class="cal-chip-row" id="cal-library-chips">
+              <button class="cal-chip active" data-lib="all">Все игры</button>
+              <button class="cal-chip" data-lib="in_library">Уже в библиотеке</button>
+              <button class="cal-chip" data-lib="not_in_library">Не добавлены</button>
+              <button class="cal-chip" data-lib="wishlist">Хочу пройти</button>
+            </div>
+          </div>
+          <div class="filter-group" style="flex:1; min-width:220px;">
+            <input type="text" class="sv-input" id="cal-search" placeholder="Поиск по названию в этом месяце...">
+          </div>
+        </div>
+
+        <div id="cal-status-message"></div>
+        <div id="calendar-weeks-container">
+          <!-- Rendered via JS (группировка релизов по неделям) -->
         </div>
       </section>
 

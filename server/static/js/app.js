@@ -35,6 +35,19 @@ const app = {
   currentTrailerMode: 'trailer',
   currentTrailerVideoList: [],
 
+  // Release Calendar State (Календарь релизов)
+  calendarState: {
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1, // 1..12
+    platforms: new Set(),            // пустое множество = все платформы
+    libFilter: 'all',                // all | in_library | not_in_library | wishlist
+    search: '',
+    items: [],
+    loading: false,
+    loaded: false,
+    lastError: null,
+  },
+
   // Backlog Randomizer Wheel State
   wheelCandidates: [],
   wheelExcludedIds: new Set(),
@@ -265,6 +278,41 @@ const app = {
       rawgBtn.addEventListener('click', () => this.performRawgSearch(rawgInput.value));
     }
 
+    // Release Calendar controls (Календарь релизов)
+    const calPrev = document.getElementById('btn-cal-prev');
+    const calNext = document.getElementById('btn-cal-next');
+    const calToday = document.getElementById('btn-cal-today');
+    if (calPrev) calPrev.addEventListener('click', () => this.calendarShiftMonth(-1));
+    if (calNext) calNext.addEventListener('click', () => this.calendarShiftMonth(1));
+    if (calToday) calToday.addEventListener('click', () => this.calendarGoToday());
+    const calSearch = document.getElementById('cal-search');
+    if (calSearch) calSearch.addEventListener('input', () => {
+      this.calendarState.search = calSearch.value;
+      this.renderReleaseCalendar();
+    });
+    document.querySelectorAll('#cal-platform-chips .cal-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const fam = chip.getAttribute('data-family');
+        const set = this.calendarState.platforms;
+        if (fam === 'all') {
+          set.clear();
+        } else if (set.has(fam)) {
+          set.delete(fam);
+        } else {
+          set.add(fam);
+        }
+        this.syncCalendarChips();
+        this.renderReleaseCalendar();
+      });
+    });
+    document.querySelectorAll('#cal-library-chips .cal-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        this.calendarState.libFilter = chip.getAttribute('data-lib');
+        this.syncCalendarChips();
+        this.renderReleaseCalendar();
+      });
+    });
+
     // GigaChat send input
     const aiInput = document.getElementById('ai-user-input');
     const aiBtn = document.getElementById('btn-send-ai');
@@ -461,6 +509,7 @@ const app = {
       'wishlist': '⭐ ВИШЛИСТ (WISHLIST)',
       'completed': '🏆 ПРОЙДЕННЫЕ (HALL OF FAME)',
       'paused': '⏸️ ПАУЗА / ДРОПНУТО',
+      'release-calendar': '📅 КАЛЕНДАРЬ РЕЛИЗОВ',
       'rawg-search': '🔍 RAWG.IO ИНСТРУМЕНТ ДОБАВЛЕНИЯ',
       'ai-assistant': '🤖 GIGACHAT AI ШТУРМАН',
       'cloud-sync': '☁️ ОБЛАКО, БЭКАП & ИМПОРТ',
@@ -481,6 +530,10 @@ const app = {
     if (tabName === 'wishlist') this.filterAndRenderWishlist();
     if (tabName === 'completed') this.filterAndRenderCompleted();
     if (tabName === 'paused') this.renderPausedView();
+    if (tabName === 'release-calendar') {
+      if (!this.calendarState.loaded && !this.calendarState.loading) this.loadReleaseCalendar();
+      else this.renderReleaseCalendar();
+    }
     if (tabName === 'cloud-sync') this.loadYandexStatusAndBackups();
     if (tabName === 'stats') this.renderStatsView();
     if (tabName === 'ai-assistant') this.renderChatMessages();
@@ -1233,6 +1286,385 @@ const app = {
     } catch (e) {
       console.error(e);
     }
+  },
+
+  // --- RELEASE CALENDAR (КАЛЕНДАРЬ РЕЛИЗОВ) ---
+  // Источник данных — существующий RAWG-клиент через GET /api/rawg/releases-calendar/{ГГГГ-ММ}.
+  // Интеграция с библиотекой — существующий POST /api/rawg/quick-add (с защитой от дублей на сервере)
+  // и PUT /api/games/{id} для смены статуса. Трейлеры — общее модальное окно trailer-modal.
+  calendarMonthKey() {
+    const s = this.calendarState;
+    return `${s.year}-${String(s.month).padStart(2, '0')}`;
+  },
+
+  calendarShiftMonth(delta) {
+    const s = this.calendarState;
+    let m = s.month + delta;
+    let y = s.year;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    s.month = m;
+    s.year = y;
+    this.loadReleaseCalendar();
+  },
+
+  calendarGoToday() {
+    const now = new Date();
+    this.calendarState.year = now.getFullYear();
+    this.calendarState.month = now.getMonth() + 1;
+    this.loadReleaseCalendar();
+  },
+
+  async loadReleaseCalendar() {
+    const s = this.calendarState;
+    const container = document.getElementById('calendar-weeks-container');
+    const subEl = document.getElementById('cal-month-sub');
+    const titleEl = document.getElementById('cal-month-title');
+    if (!container) return;
+
+    if (titleEl) titleEl.textContent = this.formatCalendarMonth(s.year, s.month);
+    s.loading = true;
+    s.lastError = null;
+    if (subEl) subEl.textContent = 'Загрузка релизов из RAWG...';
+    container.innerHTML = `<div class="cal-empty">📅 Загружаем релизы за ${this.formatCalendarMonth(s.year, s.month)}...</div>`;
+
+    try {
+      const res = await fetch(`/api/rawg/releases-calendar/${this.calendarMonthKey()}`);
+      const data = await res.json();
+      s.loading = false;
+
+      if (data.requires_api_key) {
+        s.lastError = { type: 'key', message: data.message || 'RAWG API Key не настроен.' };
+        s.items = [];
+        s.loaded = false;
+        this.renderReleaseCalendar();
+        return;
+      }
+      if (!data.success) {
+        s.lastError = { type: 'error', message: data.error || 'Не удалось загрузить календарь релизов.' };
+        s.items = [];
+        s.loaded = false;
+        this.renderReleaseCalendar();
+        return;
+      }
+
+      s.items = data.results || [];
+      s.loaded = true;
+      if (data.partial_error) {
+        s.lastError = { type: 'warn', message: `Загружено частично: ${data.partial_error}` };
+      }
+      if (subEl) subEl.textContent = `Найдено релизов: ${s.items.length}${data.cached ? ' (кэш)' : ''}`;
+      this.renderReleaseCalendar();
+    } catch (e) {
+      s.loading = false;
+      s.lastError = { type: 'error', message: `Сетевая ошибка: ${e.message}` };
+      s.items = [];
+      this.renderReleaseCalendar();
+    }
+  },
+
+  formatCalendarMonth(year, month) {
+    const names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    return `${names[(month - 1 + 12) % 12]} ${year}`;
+  },
+
+  syncCalendarChips() {
+    const s = this.calendarState;
+    document.querySelectorAll('#cal-platform-chips .cal-chip').forEach(chip => {
+      const fam = chip.getAttribute('data-family');
+      const active = fam === 'all' ? s.platforms.size === 0 : s.platforms.has(fam);
+      chip.classList.toggle('active', active);
+    });
+    document.querySelectorAll('#cal-library-chips .cal-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.getAttribute('data-lib') === s.libFilter);
+    });
+  },
+
+  // Матчинг релиза с игрой библиотеки: сначала по rawg_id, затем slug, затем нормализованному названию.
+  findLibraryGameForCalendarItem(item) {
+    if (!this.games || this.games.length === 0) return null;
+    if (item.rawg_id) {
+      const byId = this.games.find(g => g.rawg_id && Number(g.rawg_id) === Number(item.rawg_id));
+      if (byId) return byId;
+    }
+    if (item.slug) {
+      const bySlug = this.games.find(g => (g.slug || '').toLowerCase().trim() === item.slug.toLowerCase().trim());
+      if (bySlug) return bySlug;
+    }
+    const norm = (item.title || '').toLowerCase().trim();
+    if (norm) {
+      const byTitle = this.games.find(g => (g.title || '').toLowerCase().trim() === norm);
+      if (byTitle) return byTitle;
+    }
+    return null;
+  },
+
+  filterCalendarItems() {
+    const s = this.calendarState;
+    const q = (s.search || '').toLowerCase().trim();
+    return s.items.filter(item => {
+      // Фильтр платформ (совместно с библиотечным)
+      if (s.platforms.size > 0) {
+        const fams = item.platform_families || [];
+        if (!fams.some(f => s.platforms.has(f))) return false;
+      }
+      // Фильтр библиотеки
+      if (s.libFilter !== 'all') {
+        const libGame = this.findLibraryGameForCalendarItem(item);
+        if (s.libFilter === 'in_library' && !libGame) return false;
+        if (s.libFilter === 'not_in_library' && libGame) return false;
+        if (s.libFilter === 'wishlist' && (!libGame || libGame.status !== 'wishlist')) return false;
+      }
+      // Поиск по названию
+      if (q && !(item.title || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  },
+
+  // Группировка релизов по ISO-неделям месяца (как на stopgame.ru/games/dates)
+  groupCalendarByWeeks(items) {
+    const weeks = [];
+    for (const item of items) {
+      const dateStr = item.release_date || '';
+      let key = 'tba';
+      let label = 'Даты уточняются (TBA)';
+      if (dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        if (!isNaN(d.getTime())) {
+          const day = d.getDay(); // 0=Вс
+          const mondayOffset = day === 0 ? -6 : 1 - day;
+          const monday = new Date(d);
+          monday.setDate(d.getDate() + mondayOffset);
+          const sunday = new Date(monday);
+          sunday.setDate(monday.getDate() + 6);
+          const fmt = dt => `${dt.getDate()} ${this.MONTH_SHORT[dt.getMonth()]}`;
+          key = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+          label = `${fmt(monday)} — ${fmt(sunday)}`;
+        }
+      }
+      let week = weeks.find(w => w.key === key);
+      if (!week) {
+        week = { key, label, days: [] };
+        weeks.push(week);
+      }
+      week.days.push(item);
+    }
+    weeks.sort((a, b) => a.key.localeCompare(b.key));
+    const tbaIdx = weeks.findIndex(w => w.key === 'tba');
+    if (tbaIdx >= 0) {
+      const [tba] = weeks.splice(tbaIdx, 1);
+      weeks.push(tba);
+    }
+    return weeks;
+  },
+
+  MONTH_SHORT: ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
+
+  renderReleaseCalendar() {
+    const s = this.calendarState;
+    const container = document.getElementById('calendar-weeks-container');
+    const statusEl = document.getElementById('cal-status-message');
+    if (!container) return;
+    this.syncCalendarChips();
+
+    if (statusEl) {
+      if (s.lastError && s.lastError.type === 'key') {
+        statusEl.innerHTML = `<div style="background:rgba(255,230,0,0.15); border:1px solid var(--sv-yellow); color:var(--sv-yellow); padding:10px 16px; clip-path:var(--clip-cut-corner); font-size:0.85rem;">⚠️ ${this.escapeHtml(s.lastError.message)} Настройте ключ в <a href="javascript:app.switchTab('settings')" style="color:var(--sv-cyan);">Настройках API</a>.</div>`;
+      } else if (s.lastError && s.lastError.type === 'error') {
+        statusEl.innerHTML = `<div style="background:rgba(255,34,71,0.15); border:1px solid var(--sv-red); color:var(--sv-red); padding:10px 16px; clip-path:var(--clip-cut-corner); font-size:0.85rem;">❌ ${this.escapeHtml(s.lastError.message)} <button class="sv-btn sv-btn-outline sv-btn-sm" onclick="app.loadReleaseCalendar()">Повторить</button></div>`;
+      } else if (s.lastError && s.lastError.type === 'warn') {
+        statusEl.innerHTML = `<div style="background:rgba(0,240,255,0.1); border:1px solid var(--sv-cyan); color:var(--sv-cyan); padding:10px 16px; clip-path:var(--clip-cut-corner); font-size:0.85rem;">ℹ️ ${this.escapeHtml(s.lastError.message)}</div>`;
+      } else {
+        statusEl.innerHTML = '';
+      }
+    }
+
+    if (s.loading) {
+      container.innerHTML = `<div class="cal-empty">📅 Загрузка...</div>`;
+      return;
+    }
+    if (s.lastError && (!s.items || s.items.length === 0)) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const filtered = this.filterCalendarItems();
+    if (filtered.length === 0) {
+      container.innerHTML = `<div class="cal-empty">${s.items.length === 0
+        ? `В ${this.formatCalendarMonth(s.year, s.month)} релизов не найдено. Попробуйте другой месяц.`
+        : 'По выбранным фильтрам ничего не найдено. Измените фильтры платформы/библиотеки или поиск.'}</div>`;
+      return;
+    }
+
+    const weeks = this.groupCalendarByWeeks(filtered);
+    container.innerHTML = weeks.map(week => `
+      <div class="cal-week-block">
+        <div class="cal-week-header">
+          <span class="cal-week-label">${week.key === 'tba' ? '🔮 ' : '🗓️ '}${week.label}</span>
+          <span class="cal-week-count">${week.days.length} ${this.pluralizeReleases(week.days.length)}</span>
+        </div>
+        <div class="games-grid cal-week-grid">
+          ${week.days.map(item => this.renderCalendarCard(item)).join('')}
+        </div>
+      </div>
+    `).join('');
+  },
+
+  pluralizeReleases(n) {
+    const mod10 = n % 10, mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return 'релиз';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'релиза';
+    return 'релизов';
+  },
+
+  renderCalendarCard(item) {
+    const libGame = this.findLibraryGameForCalendarItem(item);
+    const cover = item.cover_url || '';
+    const dateLabel = item.release_date
+      ? (() => { const d = new Date(item.release_date + 'T00:00:00'); return isNaN(d) ? item.release_date : `${d.getDate()} ${this.MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}`; })()
+      : 'TBA';
+    const plats = (item.platforms_list || []).slice(0, 4).map(p => `<span class="comic-badge badge-platform">${this.escapeHtml(p)}</span>`).join('');
+    const rating = item.rawg_rating ? item.rawg_rating.toFixed(1) : (item.metacritic || '-');
+    const encodedJson = encodeURIComponent(JSON.stringify({
+      rawg_id: item.rawg_id, title: item.title, slug: item.slug,
+      cover_url: item.cover_url, background_url: item.background_url,
+      release_date: item.release_date, genres: item.genres, platform: item.platform,
+      rawg_rating: item.rawg_rating, metacritic: item.metacritic, playtime_main: item.playtime_main || null,
+    }));
+
+    let libraryZone;
+    if (libGame) {
+      libraryZone = `
+        <div class="cal-in-library">
+          <span class="cal-lib-status cal-status-${libGame.status}">${this.calendarStatusBadge(libGame.status)}</span>
+          <select class="sv-input cal-status-select" onchange="app.changeCalendarGameStatus(${libGame.id}, this.value, '${this.escapeJs(item.title)}')">
+            ${['wishlist', 'backlog', 'playing', 'completed', 'paused', 'dropped'].map(st =>
+              `<option value="${st}" ${libGame.status === st ? 'selected' : ''}>${this.calendarStatusOption(st)}</option>`).join('')}
+          </select>
+        </div>`;
+    } else {
+      libraryZone = `
+        <div class="cal-add-actions">
+          <select class="sv-input cal-add-select" id="cal-add-status-${item.rawg_id}">
+            <option value="wishlist">⭐ Хочу пройти</option>
+            <option value="backlog">📚 Добавить в бэклог</option>
+            <option value="playing">⚡ В процессе</option>
+            <option value="completed">🏆 Пройдена</option>
+            <option value="dropped">🚪 Брошена</option>
+          </select>
+          <button class="sv-btn sv-btn-primary sv-btn-sm" onclick="app.addCalendarGameToLibrary(${item.rawg_id}, '${encodedJson}')">➕ В библиотеку</button>
+        </div>`;
+    }
+
+    return `
+      <div class="game-card cal-game-card">
+        <div class="card-poster" style="background-image: url('${cover}')">
+          <div class="card-top-bar">
+            <div class="card-badges">
+              <span class="comic-badge badge-release-date">📅 ${dateLabel}</span>
+            </div>
+            <div class="rating-tag" style="background:rgba(0,0,0,0.8); border:1px solid var(--sv-yellow); color:var(--sv-yellow); padding:3px 8px; clip-path:var(--clip-badge); font-family:var(--font-comic); font-size:0.8rem;">
+              ⭐ ${rating}
+            </div>
+          </div>
+        </div>
+        <div class="card-content">
+          <h3 class="card-title">${this.escapeHtml(item.title)}</h3>
+          <div class="card-meta">${this.escapeHtml(item.genres || 'Игры')}</div>
+          <div class="cal-platform-chips">${plats}</div>
+          ${libraryZone}
+          <div class="card-footer-layout" style="margin-top:10px;">
+            <div class="card-primary-actions" style="width:100%;">
+              <button class="sv-btn sv-btn-cyan sv-btn-sm" style="flex:1;" onclick="app.openCalendarTrailer(${item.rawg_id}, '${this.escapeJs(item.title)}', '${this.escapeJs(cover)}', '${this.escapeJs(item.platform || '')}', '${this.escapeJs(item.genres || '')}')">🎬 Трейлер</button>
+              ${item.store_url ? `<a class="sv-btn sv-btn-outline sv-btn-sm" style="text-align:center; text-decoration:none;" href="${this.escapeHtml(item.store_url)}" target="_blank" rel="noopener">🛒 Магазин</a>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  calendarStatusBadge(status) {
+    const map = {
+      wishlist: '⭐ Хочу пройти', playing: '⚡ В процессе', completed: '🏆 Пройдена',
+      paused: '⏸️ Пауза', dropped: '🚪 Брошена', backlog: '📚 Бэклог',
+    };
+    return map[status] || this.escapeHtml(status);
+  },
+
+  calendarStatusOption(status) {
+    const map = {
+      wishlist: '⭐ Хочу пройти', playing: '⚡ В процессе', completed: '🏆 Пройдена',
+      paused: '⏸️ Пауза (отложено)', dropped: '🚪 Брошена', backlog: '📚 Бэклог',
+    };
+    return map[status] || status;
+  },
+
+  async addCalendarGameToLibrary(rawgId, encodedJson) {
+    try {
+      const item = JSON.parse(decodeURIComponent(encodedJson));
+      const sel = document.getElementById(`cal-add-status-${rawgId}`);
+      const targetStatus = sel ? sel.value : 'wishlist';
+      const res = await fetch('/api/rawg/quick-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawg_id: rawgId, target_status: targetStatus, game_data: item })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.duplicate) {
+          // Игра уже в библиотеке — меняем статус существующей записи, дубликатов не создаём
+          const gid = data.game && data.game.id;
+          if (gid && data.game.status !== targetStatus) {
+            await this.updateGameField(gid, { status: targetStatus });
+            this.showToast(`«${item.title}» уже в библиотеке — статус обновлён: ${this.calendarStatusOption(targetStatus)}`, 'info');
+          } else {
+            this.showToast(`«${item.title}» уже есть в библиотеке.`, 'info');
+          }
+        } else {
+          this.showToast(`«${item.title}» добавлена: ${this.calendarStatusOption(targetStatus)}`, 'success');
+        }
+        await this.refreshAllData();
+        this.renderReleaseCalendar();
+      } else {
+        this.showAlert(data.error || 'Не удалось добавить игру', 'ОШИБКА ДОБАВЛЕНИЯ', 'error');
+      }
+    } catch (e) {
+      this.showAlert(e.message, 'СЕТЕВАЯ ОШИБКА', 'error');
+    }
+  },
+
+  async changeCalendarGameStatus(gameId, newStatus, title) {
+    const res = await this.updateGameField(gameId, { status: newStatus });
+    if (res && (res.success === undefined || res.success)) {
+      this.showToast(`Статус «${title}»: ${this.calendarStatusOption(newStatus)}`, 'success');
+      await this.refreshAllData();
+      this.renderReleaseCalendar();
+    } else {
+      this.showAlert((res && res.error) || 'Не удалось изменить статус', 'ОШИБКА', 'error');
+    }
+  },
+
+  // Переиспользуем существующее модальное окно трейлеров; RAWG movies — дополнительный источник чипов.
+  openCalendarTrailer(rawgId, title, coverUrl, platform, genres) {
+    this.openTrailerModal(null, title, coverUrl, platform, genres);
+    if (rawgId) this.attachRawgMovieChips(rawgId);
+  },
+
+  async attachRawgMovieChips(rawgId) {
+    try {
+      const res = await fetch(`/api/rawg/movies/${rawgId}`);
+      const data = await res.json();
+      if (!data.success || !Array.isArray(data.movies) || data.movies.length === 0) return;
+      const relatedBar = document.getElementById('related-videos-bar');
+      const relatedChips = document.getElementById('related-videos-chips');
+      if (!relatedBar || !relatedChips) return;
+      const extra = data.movies.map(m =>
+        `<button type="button" class="related-chip" onclick="document.getElementById('trailer-iframe').src='${m.embed_url}'">🎞️ RAWG: ${this.escapeHtml(m.name)}</button>`
+      ).join('');
+      relatedChips.insertAdjacentHTML('beforeend', extra);
+      relatedBar.style.display = 'flex';
+    } catch (e) { /* молча: YouTube-путь уже работает */ }
   },
 
   // --- MODALS ---
